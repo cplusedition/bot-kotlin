@@ -52,7 +52,7 @@ directory as working directory.
 This module contains builders for managing this project. It also work as a
 simple example on how to use the `bot-builder` framework.
 
-For example, invoke the `ReleaseBuilder.distSrcZip()`` method as a unit
+For example, invoke the `ReleaseBuilder.distSrcZip()` method as a unit
 test in the IDE create the source zip file and checksum. invoke the
-`TestBuilder.debugOn()`` or `debugOff()`` to turn debug on and off in all
+`TestBuilder.debugOn()` or `debugOff()` to turn debug on and off in all
 the tests respectively.
