@@ -1,0 +1,5 @@
+rootProject.name = 'bot-kotlin'
+
+include 'bot-core'
+include 'bot-builder'
+include 'bot-build'

@@ -1,0 +1,9 @@
+target/
+trash/
+out/
+/build/
+.gradle/
+.idea/
+.attach_pid*
+CHANGES
+
