@@ -540,24 +540,22 @@ open class WithUtil {
     }
 
     /**
-     * Create a temporary backup of the outfile before code() write to the outfile.
-     * If operation fail, restore the outfile from the backup and the backup get deleted.
-     * If operation succeed, the outfile contains the result, the backup get deleted.
+     * Create a tmpfile, invoke code(tmpfile, file) with tmpfile as destination, input file
+     * as source file. If operation success, replace input file with tmpfile. In either case,
+     * delete tmpfile.
      *
      * @param code(dstfile, srcfile)
      * @throws Exception If operation fail.
      */
     @Throws(Exception::class)
     fun backup(outfile: File, code: Fun20<File, File>) {
-        val dir = outfile.parentFile
-        val tmpdir = createTempDir(directory = if (dir.canWrite()) dir else null)
-        // There are apparently timing issue here that it failed if flie not found exception.
-        // Add some more checking on tmpdir to workaround that.
-        val tmpfile = createTempFile(directory = if (tmpdir.isDirectory && tmpdir.canWrite()) tmpdir else null)
+        val tmpfile = createTempFile()
+        tmpfile.deleteOnExit()
         try {
-            backup(outfile, tmpfile, code)
+            code(tmpfile, outfile)
+            FileUt.copy(outfile, tmpfile)
         } finally {
-            tmpdir.deleteRecursively()
+            tmpfile.delete()
         }
     }
 
