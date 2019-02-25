@@ -446,10 +446,14 @@ open class WithUtil {
      * @param code(String): String?.
      */
     @Throws(IOException::class)
-    fun rewriteText(file: File, charset: Charset = Charsets.UTF_8, code: Fun11<String, String>) {
-        backup(file) { dst, src ->
-            dst.writeText(code(src.readText(charset)), charset)
+    fun rewriteText(file: File, charset: Charset = Charsets.UTF_8, code: Fun11<String, String>): Boolean {
+        val input = file.readText(charset)
+        val output = code(input)
+        val modified = (output != input)
+        if (modified) {
+            file.writeText(output, charset)
         }
+        return modified
     }
 
     /**
@@ -502,7 +506,6 @@ open class WithUtil {
     @Throws(Exception::class)
     fun tmpfile(suffix: String = "tmp", dir: File? = null, code: Fun10<File>) {
         val tmpfile = createTempFile(suffix = suffix, directory = dir)
-        tmpfile.deleteOnExit()
         try {
             code(tmpfile)
         } finally {
@@ -529,9 +532,8 @@ open class WithUtil {
      * @throws Exception If operation fail.
      */
     @Throws(Exception::class)
-    fun <T> tmpfile(suffix: String = "tmp", dir: File? = null, code: Fun11<File, T>): T {
+    fun <T> tmpfile(suffix: String? = null, dir: File? = null, code: Fun11<File, T>): T {
         val tmpfile = createTempFile(suffix = suffix, directory = dir)
-        tmpfile.deleteOnExit()
         try {
             return code(tmpfile)
         } finally {
@@ -540,9 +542,9 @@ open class WithUtil {
     }
 
     /**
-     * Create a tmpfile, invoke code(tmpfile, file) with tmpfile as destination, input file
-     * as source file. If operation success, replace input file with tmpfile. In either case,
-     * delete tmpfile.
+     * Create a tmpfile, call code(tmpfile, file) with tmpfile as dst and input file as src.
+     * If operation succeed, ie. without throwing exception, copy tmpfile to input file.
+     * Delete the tmpfile in either case,
      *
      * @param code(dstfile, srcfile)
      * @throws Exception If operation fail.
@@ -550,7 +552,6 @@ open class WithUtil {
     @Throws(Exception::class)
     fun backup(outfile: File, code: Fun20<File, File>) {
         val tmpfile = createTempFile()
-        tmpfile.deleteOnExit()
         try {
             code(tmpfile, outfile)
             FileUt.copy(outfile, tmpfile)

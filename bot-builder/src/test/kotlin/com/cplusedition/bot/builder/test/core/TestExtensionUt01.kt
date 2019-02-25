@@ -457,6 +457,39 @@ class TestExtensionUt01 : TestBase() {
     }
 
     @Test
+    fun testWithBackup03() {
+        subtest {
+            With.tmpfile { outfile ->
+                outfile.bufferedWriter().use { it.write("123testing") }
+                With.backup(outfile) { dstfile, srcfile ->
+                    val s = srcfile.readText()
+                    dstfile.bufferedWriter().use {
+                        it.write(s)
+                        it.write("testing123")
+                    }
+                }
+                assertTrue(outfile.exists())
+                assertEquals("123testingtesting123", outfile.readText())
+            }
+        }
+
+        subtest {
+            With.tmpfile { outfile ->
+                outfile.bufferedWriter().use { it.write("123testing") }
+                With.exceptionOrFail {
+                    With.backup(outfile) { dstfile, srcfile ->
+                        assertEquals("123testing", srcfile.readText())
+                        dstfile.bufferedWriter().use { it.write("You see me not") }
+                        throw IOException("Expected exception")
+                    }
+                }
+                assertTrue(outfile.exists())
+                assertEquals("123testing", outfile.readText())
+            }
+        }
+    }
+
+    @Test
     fun testRewrite01() {
         subtest {
             val outfile = tmpFile()

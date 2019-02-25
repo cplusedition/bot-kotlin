@@ -28,8 +28,6 @@ import com.cplusedition.bot.core.listOrEmpty
 import java.io.File
 import java.util.*
 import kotlin.collections.ArrayList
-import kotlin.coroutines.experimental.SequenceBuilder
-import kotlin.coroutines.experimental.buildSequence
 
 //////////////////////////////////////////////////////////////////////
 
@@ -226,12 +224,20 @@ open class Fileset(
     }
 
     /** Path matching using ant path selectors. */
-    open class SelectorFilter(val patterns: Array<out String>, val caseSensitive: Boolean = true) : IFilePathPredicate {
+    open class SelectorFilter(
+        patterns: Array<out String>,
+        private val caseSensitive: Boolean = true
+    ) : IFilePathPredicate {
 
-        constructor(vararg patterns: String) : this(patterns)
+        constructor(vararg patterns: String) : this(patterns, true)
+
+        constructor(caseSensitive: Boolean, vararg patterns: String) : this(patterns, caseSensitive)
+
+        private val tokenizedPat = patterns.map { SelectorUtils.tokenizePathAsArray(it) }
 
         override fun invoke(file: File, rpath: String): Boolean {
-            return patterns.any { SelectorUtils.matchPath(it, rpath, caseSensitive) }
+            val tokenizedPath = SelectorUtils.tokenizePathAsArray(rpath)
+            return tokenizedPat.any { SelectorUtils.matchPath(it, tokenizedPath, caseSensitive) }
         }
     }
 
@@ -244,7 +250,7 @@ open class Fileset(
             bottomup: Boolean,
             includes: IFilePathPredicate?
         ): Sequence<T> {
-            return buildSequence {
+            return sequence {
                 collect1(
                     fileset.dir,
                     fileset.basepath,
@@ -257,7 +263,7 @@ open class Fileset(
             }
         }
 
-        private suspend fun <T> SequenceBuilder<T>.collect1(
+        private suspend fun <T> SequenceScope<T>.collect1(
             dir: File,
             dirpath: String,
             bottomup: Boolean,
@@ -340,7 +346,7 @@ open class Filepathset(
             collector: FilePathCollector<T>,
             predicate: IFilePathPredicate?
         ): Sequence<T> {
-            return buildSequence {
+            return sequence {
                 for (rpath in rpaths) {
                     val file = dir.file(if (dirpath.isEmpty()) rpath else "$dirpath${FileUt.SEP}$rpath")
                     if (file.exists() && (predicate == null || predicate(file, rpath))) {
