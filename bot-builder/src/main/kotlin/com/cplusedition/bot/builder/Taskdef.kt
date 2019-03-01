@@ -190,7 +190,7 @@ open class Zip(
         _result = Result(zipfile)
         With.zipOutputStream(zipfile) { out ->
             for ((prefix, fileset) in filesets) {
-                fileset.collect().forEach { (file, rpath) ->
+                fileset.walk { file, rpath ->
                     try {
                         val path = prefix + rpath
                         if (verbose) log.d(path)
@@ -289,7 +289,7 @@ open class Copy(
     override fun run(): Copy.Result {
         _result = Result()
         for (fileset in filesets) {
-            fileset.collect().forEach { (file, rpath) ->
+            fileset.walk { file, rpath ->
                 val dstfile = File(dstdir, rpath)
                 if (file.isDirectory) {
                     dstfile.mkdirs()
@@ -371,7 +371,7 @@ open class CopyDiff(
     override fun run(): CopyDiff.Result {
         _result = Result()
         for (fileset in filesets) {
-            fileset.collect().forEach { (file, rpath) ->
+            fileset.walk { file, rpath ->
                 val dstfile = File(dstdir, rpath)
                 if (file.isDirectory) {
                     dstfile.mkdirs()
@@ -453,7 +453,7 @@ open class CopyMirror(
 
     override fun run(): CopyMirror.Result {
         _result = Result()
-        fileset.collect().forEach { (file, rpath) ->
+        fileset.walk { file, rpath ->
             try {
                 val dstfile = File(dstdir, rpath)
                 if (file.isDirectory) {
@@ -615,16 +615,20 @@ open class Remove(vararg filesets: IFileset) : CoreTask<Remove.Result>() {
     override fun run(): Remove.Result {
         _result = Result()
         if (filesets.size == 1) {
-            filesets.first().collect(bottomup = true).forEach {
-                if (it.first.isFile) removefile(_result, it)
-                else if (it.first.isDirectory) removedir(_result, it)
+            filesets.first().walk(bottomup = true) { file, rpath ->
+                if (file.isFile) removefile(_result, file, rpath)
+                else if (file.isDirectory) removedir(_result, file, rpath)
             }
         } else if (filesets.size > 1) {
-            filesets.forEach { fileset ->
-                fileset.files().forEach { removefile(_result, it) }
+            filesets.forEach {
+                it.walk { file, rpath ->
+                    if (file.isFile) removefile(_result, file, rpath)
+                }
             }
-            filesets.forEach { fileset ->
-                fileset.dirs(bottomup = true).forEach { removedir(_result, it) }
+            filesets.forEach {
+                it.walk(bottomup = true) { file, rpath ->
+                    if (file.isDirectory) removedir(_result, file, rpath)
+                }
             }
         }
         with(_result) {
@@ -640,21 +644,21 @@ open class Remove(vararg filesets: IFileset) : CoreTask<Remove.Result>() {
         return _result
     }
 
-    private fun removefile(result: Result, it: Pair<File, String>) {
+    private fun removefile(result: Result, file: File, rpath: String) {
         ++result.total
-        if (it.first.delete()) {
-            result.filesOK.add(it.second)
+        if (file.delete()) {
+            result.filesOK.add(rpath)
         } else {
-            result.filesFailed.add(it.second)
+            result.filesFailed.add(rpath)
         }
     }
 
-    private fun removedir(result: Result, it: Pair<File, String>) {
+    private fun removedir(result: Result, file: File, rpath: String) {
         ++result.total
-        if (it.first.listOrEmpty().isEmpty() && it.first.delete()) {
-            result.dirsOK.add(it.second)
+        if (file.listOrEmpty().isEmpty() && file.delete()) {
+            result.dirsOK.add(rpath)
         } else {
-            result.dirsFailed.add(it.second)
+            result.dirsFailed.add(rpath)
         }
     }
 
@@ -707,7 +711,8 @@ open class Checksum(
     override fun run(): Checksum.Result {
         _result = Result(sumfile, kind)
         WithUtil.With.bufferedWriter(sumfile) { writer ->
-            fileset.files().forEach { (file, rpath) ->
+            fileset.walk { file, rpath ->
+                if (!file.isFile) { return@walk }
                 try {
                     val digester = MessageDigest.getInstance(kind.algorithm)
                     WithUtil.With.bytes(file, 4 * 1024 * 1024) { buf, len ->

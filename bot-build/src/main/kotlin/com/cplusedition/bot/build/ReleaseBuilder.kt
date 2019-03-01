@@ -24,6 +24,7 @@ import com.cplusedition.bot.build.BuilderBase.Workspace.botProject
 import com.cplusedition.bot.builder.BuilderUtil.Companion.BU
 import com.cplusedition.bot.builder.Checksum
 import com.cplusedition.bot.builder.Fileset
+import com.cplusedition.bot.builder.KotlinProject
 import com.cplusedition.bot.builder.Zip
 import com.cplusedition.bot.core.*
 import com.cplusedition.bot.core.ChecksumUtil.ChecksumKind.SHA256
@@ -31,6 +32,7 @@ import com.cplusedition.bot.core.DateUtil.Companion.DateUt
 import com.cplusedition.bot.core.FileUtil.Companion.FileUt
 import com.cplusedition.bot.core.ProcessUtil.Companion.ProcessUt
 import com.cplusedition.bot.core.StructUtil.Companion.StructUt
+import com.cplusedition.bot.core.WithUtil.Companion.With
 import org.junit.Ignore
 import org.junit.Test
 
@@ -40,7 +42,7 @@ class ReleaseBuilder : BuilderBase(true) {
     @Test
     fun distSrcZip() {
         log.enterX(this::distSrcZip) {
-            val zipfile = builderRes("dist/${botProject.gav.artifactId}-${DateUt.today}-src.zip").mkparentOrFail()
+            val zipfile = Dist.zipfile.mkparentOrFail()
             task(Zip(zipfile).withPrefix(*Dist.modules).add(Dist.top).preserveTimestamp(false))
             task(Checksum.single(SHA256, zipfile))
         }
@@ -53,21 +55,43 @@ class ReleaseBuilder : BuilderBase(true) {
     @Test
     fun distSrcZipUsingZipCommand() {
         log.enterX(this::distSrcZipUsingZipCommand) {
-            val zipfile = builderRes("dist/${botProject.gav.artifactId}-${DateUt.today}-src.zip").mkparentOrFail()
+            val zipfile = Dist.zipfile.mkparentOrFail()
             zipfile.delete()
-            val cmdline = ArrayList<String>()
-            cmdline.addAll("zip", "-ry", zipfile.absolutePath)
+            val cmdline = mutableListOf("zip", "-ry", zipfile.absolutePath)
+            val cmdsize = cmdline.size
             for (fileset in Dist.modules) {
-                cmdline.addAll(fileset.collector(FilePathCollectors::pathCollector).collect().map {
-                    "${fileset.dir.name}${FileUt.SEPCHAR}$it"
-                })
+                fileset.walk { _, rpath ->
+                    cmdline.add("${fileset.dir.name}${FileUt.SEPCHAR}$rpath")
+                }
             }
-            cmdline.addAll(Dist.top.collector(FilePathCollectors::pathCollector).collect())
+            Dist.top.walk { _, rpath ->
+                cmdline.add(rpath)
+            }
             // log.d(cmdline)
             log.d(ProcessUt.backtick(botProject.dir, cmdline))
-            log.d("# Zip ${zipfile.name}: ${cmdline.size - 3} files, ${BU.filesizeString(zipfile)}")
+            log.d("# Zip ${zipfile.name}: ${cmdline.size - cmdsize} files, ${BU.filesizeString(zipfile)}")
             task(Checksum.single(SHA256, zipfile))
         }
+    }
+
+    @Ignore
+    @Test
+    fun updateReleaseVersion() {
+        var count = 0
+        for (project in Workspace.projects) {
+            val buildgradle = project.dir.file("build.gradle")
+            if (!buildgradle.exists()) continue
+            val modified = With.rewriteText(buildgradle) {
+                it.replace(Regex("""(?mi)^\s*version\s*'([\d.]+)'\s*$"""), "version '$VERSION'")
+            }
+            var msg = "# ${project.gav.artifactId}"
+            if (modified) {
+                ++count
+                msg += ": modified"
+            }
+            log.d(msg)
+        }
+        log.i("## Updated $count files")
     }
 
     @Ignore
@@ -75,7 +99,8 @@ class ReleaseBuilder : BuilderBase(true) {
     fun fixCopyrights() {
         val copyright = Workspace.dir.existsOrFail("COPYRIGHT").readText()
         val regex = Regex("(?si)\\s*/\\*.*?Cplusedition Limited.*?\\s+All rights reserved.*?\\*/\\s*")
-        for (project in arrayOf(botCoreProject, botBuilderProject, botBuildProject)) {
+        for (project in Workspace.projects) {
+            if (project !is KotlinProject) continue
             log.i("### ${project.gav.artifactId}")
             val modified = ArrayList<String>()
             for (dir in StructUt.concat(project.mainSrcs, project.testSrcs)) {
@@ -94,6 +119,7 @@ class ReleaseBuilder : BuilderBase(true) {
     }
 
     object Dist {
+        val zipfile = botBuildProject.dir.file("dist/${botProject.gav.artifactId}-$VERSION-${DateUt.today}-src.zip")
         val srcs = arrayOf(
             "src/main/kotlin/**/*.kt",
             "src/test/kotlin/**/*.kt",

@@ -1071,9 +1071,7 @@ open class Treewalker(private val dir: File) {
      *
      * @return Sequence<Pair<File, String>> File/directory where includes() return true.
      */
-    fun collect(
-        includes: IFilePathPredicate?
-    ): Sequence<Pair<File, String>> {
+    fun collect(includes: IFilePathPredicate?): Sequence<Pair<File, String>> {
         return collector(::Pair).collect(includes)
     }
 

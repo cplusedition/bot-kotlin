@@ -28,7 +28,7 @@ open class BuilderBase(debugging: Boolean) : BasicBuilder(Conf(debugging)) {
 
     companion object {
         const val GROUP = "com.cplusedition.bot"
-        const val VERSION = "1"
+        const val VERSION = "1.2"
     }
 
     class Conf(debugging: Boolean) : BasicBuilderConf(

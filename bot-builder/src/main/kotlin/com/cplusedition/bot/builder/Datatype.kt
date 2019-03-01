@@ -19,12 +19,9 @@ package com.cplusedition.bot.builder
 
 import com.cplusedition.bot.builder.BuilderUtil.Companion.BU
 import com.cplusedition.bot.builder.apache.SelectorUtils
-import com.cplusedition.bot.core.FilePathCollector
+import com.cplusedition.bot.core.*
 import com.cplusedition.bot.core.FileUtil.Companion.FileUt
-import com.cplusedition.bot.core.IFilePathPredicate
 import com.cplusedition.bot.core.MatchUtil.Companion.MatchUt
-import com.cplusedition.bot.core.file
-import com.cplusedition.bot.core.listOrEmpty
 import java.io.File
 import java.util.*
 import kotlin.collections.ArrayList
@@ -34,14 +31,11 @@ import kotlin.collections.ArrayList
 interface IFilesetCollector<T> {
 
     /**
-     * @param bottomup true to return sequence in bottom up order, ie. children before parent directory.
+     * @param bottomup true to return sequence in depth first bottom up order, ie. children before parent directory.
      * @param include(file, rpath) true of include the file/directory in the output sequence.
      * Note that rpath includes the basepath.
      */
-    fun collect(
-        bottomup: Boolean = false,
-        includes: IFilePathPredicate? = null
-    ): Sequence<T>
+    fun collect(bottomup: Boolean = false, includes: IFilePathPredicate? = null): Sequence<T>
 
     /**
      * Collect only files.
@@ -69,24 +63,29 @@ interface IFileset {
     fun <T> collector(collector: FilePathCollector<T>): IFilesetCollector<T>
 
     /**
-     * @param bottomup If true, return result in bottom up order, ie. children before parent. Default is false.
+     * Walk the fileset, calling callback on each accepted file.
+     *
+     * @param bottomup If true, return result in depth first bottom up order, ie. children before parent. Default is false.
+     * @param callback(file, rpath).
+     */
+    fun walk(bottomup: Boolean = false, callback: IFilePathCallback)
+
+    /**
+     * @param bottomup If true, return result in depth first bottom up order, ie. children before parent. Default is false.
      * @param includes File, rpath filter.
      * @return The file and relative path of files or dirs in the fileset.
      */
-    fun collect(
-        bottomup: Boolean = false,
-        includes: IFilePathPredicate? = null
-    ): Sequence<Pair<File, String>>
+    fun collect(bottomup: Boolean = false, includes: IFilePathPredicate? = null): Sequence<Pair<File, String>>
 
     /**
-     * Shortcut walk() to returns only files, not directories.
+     * Shortcut collect() to returns only files, not directories.
      */
     fun files(bottomup: Boolean = false): Sequence<Pair<File, String>> {
         return collect(bottomup, FileUt.filePredicate)
     }
 
     /**
-     * Shortcut walk() to returns only directories.
+     * Shortcut collect() to returns only directories.
      */
     fun dirs(bottomup: Boolean = false): Sequence<Pair<File, String>> {
         return collect(bottomup, FileUt.dirPredicate)
@@ -151,17 +150,6 @@ open class Fileset(
                 && (excludePredicates.isEmpty() || excludePredicates.none { it(file, rpath) })
     }
 
-    override fun <T> collector(collector: FilePathCollector<T>): IFilesetCollector<T> {
-        return FilesetCollector(this, collector)
-    }
-
-    override fun collect(
-        bottomup: Boolean,
-        includes: IFilePathPredicate?
-    ): Sequence<Pair<File, String>> {
-        return collector(::Pair).collect(bottomup, includes)
-    }
-
     fun includes(vararg patterns: String): Fileset {
         return includes(SelectorFilter(patterns))
     }
@@ -212,6 +200,41 @@ open class Fileset(
         return this
     }
 
+    override fun <T> collector(collector: FilePathCollector<T>): IFilesetCollector<T> {
+        return FilesetCollector(this, collector)
+    }
+
+    override fun collect(bottomup: Boolean, includes: IFilePathPredicate?): Sequence<Pair<File, String>> {
+        return collector(::Pair).collect(bottomup, includes)
+    }
+
+    override fun walk(bottomup: Boolean, callback: IFilePathCallback) {
+        walk1(dir, basepath, bottomup, callback, this::acceptdir, this::accept)
+    }
+
+    private fun walk1(
+        dir: File,
+        dirpath: String,
+        bottomup: Boolean,
+        callback: IFilePathCallback,
+        acceptdir: IFilePathPredicate,
+        accept: IFilePathPredicate
+    ) {
+        for (name in dir.listOrEmpty()) {
+            val file = File(dir, name)
+            val filepath = if (dirpath.isEmpty()) name else "$dirpath${FileUt.SEPCHAR}$name"
+            if (!bottomup && accept(file, filepath)) {
+                callback(file, filepath)
+            }
+            if (file.isDirectory && acceptdir(file, filepath)) {
+                walk1(file, filepath, bottomup, callback, acceptdir, accept)
+            }
+            if (bottomup && accept(file, filepath)) {
+                callback(file, filepath)
+            }
+        }
+    }
+
     open class RegexFilter(vararg regexs: Regex) : IFilePathPredicate {
 
         private val re: Array<out Regex> = regexs
@@ -224,10 +247,8 @@ open class Fileset(
     }
 
     /** Path matching using ant path selectors. */
-    open class SelectorFilter(
-        patterns: Array<out String>,
-        private val caseSensitive: Boolean = true
-    ) : IFilePathPredicate {
+    open class SelectorFilter(patterns: Array<out String>, private val caseSensitive: Boolean = true) :
+        IFilePathPredicate {
 
         constructor(vararg patterns: String) : this(patterns, true)
 
@@ -241,15 +262,10 @@ open class Fileset(
         }
     }
 
-    open class FilesetCollector<T>(
-        private val fileset: Fileset,
-        private val collector: FilePathCollector<T>
-    ) : IFilesetCollector<T> {
+    open class FilesetCollector<T>(private val fileset: Fileset, private val collector: FilePathCollector<T>) :
+        IFilesetCollector<T> {
 
-        override fun collect(
-            bottomup: Boolean,
-            includes: IFilePathPredicate?
-        ): Sequence<T> {
+        override fun collect(bottomup: Boolean, includes: IFilePathPredicate?): Sequence<T> {
             return sequence {
                 collect1(
                     fileset.dir,
@@ -274,7 +290,7 @@ open class Fileset(
         ) {
             for (name in dir.listOrEmpty()) {
                 val file = File(dir, name)
-                val filepath = if (dirpath.isEmpty()) name else "$dirpath${File.separatorChar}$name"
+                val filepath = if (dirpath.isEmpty()) name else "$dirpath${FileUt.SEPCHAR}$name"
                 if (!bottomup && (predicate == null || predicate(file, filepath)) && accept(file, filepath)) {
                     yield(collector(file, filepath))
                 }
@@ -318,17 +334,31 @@ open class Filepathset(
         return Collector(this, collector)
     }
 
-    override fun collect(
-        bottomup: Boolean,
-        includes: IFilePathPredicate?
-    ): Sequence<Pair<File, String>> {
+    override fun collect(bottomup: Boolean, includes: IFilePathPredicate?): Sequence<Pair<File, String>> {
         return collector(::Pair).collect(bottomup, includes)
     }
 
-    private class Collector<T>(
-        private val filepathset: Filepathset,
-        private val collector: FilePathCollector<T>
-    ) : IFilesetCollector<T> {
+    override fun walk(bottomup: Boolean, callback: IFilePathCallback) {
+        walk1(dir, "", (if (bottomup) rpaths.reversed() else rpaths), callback)
+    }
+
+    private fun walk1(
+        dir: File,
+        dirpath: String,
+        rpaths: Collection<String>,
+        callback: IFilePathCallback
+    ) {
+        for (rpath in rpaths) {
+            val file = dir.file(if (dirpath.isEmpty()) rpath else "$dirpath${FileUt.SEPCHAR}$rpath")
+            if (file.exists()) {
+                callback(file, rpath)
+            }
+        }
+    }
+
+    private class Collector<T>(private val filepathset: Filepathset, private val collector: FilePathCollector<T>) :
+        IFilesetCollector<T> {
+
         override fun collect(bottomup: Boolean, includes: IFilePathPredicate?): Sequence<T> {
             return collect1(
                 filepathset.dir,
@@ -348,7 +378,7 @@ open class Filepathset(
         ): Sequence<T> {
             return sequence {
                 for (rpath in rpaths) {
-                    val file = dir.file(if (dirpath.isEmpty()) rpath else "$dirpath${FileUt.SEP}$rpath")
+                    val file = dir.file(if (dirpath.isEmpty()) rpath else "$dirpath${FileUt.SEPCHAR}$rpath")
                     if (file.exists() && (predicate == null || predicate(file, rpath))) {
                         yield(collector(file, rpath))
                     }

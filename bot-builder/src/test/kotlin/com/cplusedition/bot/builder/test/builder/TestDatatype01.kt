@@ -202,6 +202,99 @@ class TestDatatype01 : TestBase() {
     }
 
     @Test
+    fun testFilesetWalk01() {
+        val filesdir = testResDir.file("files")
+        fun walk(fileset: Fileset, bottomup: Boolean = false): List<String> {
+            val ret = mutableListOf<String>()
+            fileset.walk(bottomup) { _, rpath -> ret.add(rpath) }
+            return ret
+        }
+        subtest("collect(preorder)") {
+            assertEquals(16, walk(Fileset(filesdir)).count())
+            assertEquals(
+                setOf("dir2/dir1a.txt", "dir2/dir2a/file2a.txt", "dir2/dir2a", "dir1/dir2a.txt", "dir1/dir1a"),
+                walk(Fileset(filesdir, "**/*a*", "**/file1*")).toSet()
+            )
+            assertEquals(
+                setOf(
+                    "dir2/dir1a.txt",
+                    "dir2/dir2a",
+                    "dir2/dir2only.txt",
+                    "dir2",
+                    "dir1/dir2a.txt",
+                    "dir1/dir1a",
+                    "dir1/dir1only.txt",
+                    "dir1",
+                    "empty.dir",
+                    "empty.txt"
+                ), walk(Fileset(filesdir, null, "**/file*")).toSet()
+            )
+            val list = walk(Fileset(filesdir).includes("**/*1*", "**/*2*"))
+            assertEquals(
+                setOf(
+                    "dir2",
+                    "dir2/dir1a.txt",
+                    "dir2/dir2a",
+                    "dir2/dir2a/file2a.txt",
+                    "dir2/dir2only.txt",
+                    "dir2/file1.txt",
+                    "dir2/file2.txt",
+                    "dir1",
+                    "dir1/dir2a.txt",
+                    "dir1/dir1a",
+                    "dir1/dir1a/file1a.txt",
+                    "dir1/dir1only.txt",
+                    "dir1/file1.txt",
+                    "dir1/file2.txt"
+                ),
+                list.toSet()
+            )
+            // Scan is same as preOrder.
+            assertTrue(list.indexOf("dir1/dir1a") < list.indexOf("dir1/dir1a/file1a.txt"))
+            assertTrue(list.indexOf("dir2/dir2a") < list.indexOf("dir2/dir2a/file2a.txt"))
+        }
+        subtest("collect(bottomUp)") {
+            assertEquals(
+                setOf(
+                    "dir2/dir1a.txt",
+                    "dir2/dir2a",
+                    "dir2/dir2only.txt",
+                    "dir2",
+                    "dir1/dir2a.txt",
+                    "dir1/dir1a",
+                    "dir1/dir1only.txt",
+                    "dir1",
+                    "empty.dir",
+                    "empty.txt"
+                ),
+                walk(Fileset(filesdir, null, "**/file*"), bottomup = true).toSet()
+            )
+            val list = walk(Fileset(filesdir).includes("**/*1*", "**/*2*"), bottomup = true)
+            assertEquals(
+                setOf(
+                    "dir2",
+                    "dir2/dir1a.txt",
+                    "dir2/dir2a",
+                    "dir2/dir2a/file2a.txt",
+                    "dir2/dir2only.txt",
+                    "dir2/file1.txt",
+                    "dir2/file2.txt",
+                    "dir1",
+                    "dir1/dir2a.txt",
+                    "dir1/dir1a",
+                    "dir1/dir1a/file1a.txt",
+                    "dir1/dir1only.txt",
+                    "dir1/file1.txt",
+                    "dir1/file2.txt"
+                ),
+                list.toSet()
+            )
+            assertTrue(list.indexOf("dir2/dir2a") > list.indexOf("dir2/dir2a/file2a.txt"))
+            assertTrue(list.indexOf("dir1/dir1a") > list.indexOf("dir1/dir1a/file1a.txt"))
+        }
+    }
+
+    @Test
     fun testFilesetFiles01() {
         val filesdir = testResDir.file("files")
         subtest("files") {
@@ -581,6 +674,101 @@ class TestDatatype01 : TestBase() {
                     "notexists1"
                 ).dirs().toPathSet()
             )
+        }
+    }
+
+    @Test
+    fun testFilepathsetWalk01() {
+        val filesdir = testResDir.file("files")
+        fun walk(fileset: Filepathset, bottomup: Boolean = false): List<String> {
+            val ret = mutableListOf<String>()
+            fileset.walk(bottomup) { _, rpath -> ret.add(rpath) }
+            return ret
+        }
+        subtest {
+            assertEquals(
+                setOf(
+                    "dir1/dir2a.txt",
+                    "dir2/dir1a.txt",
+                    "dir2/dir2a",
+                    "dir2/dir2only.txt"
+                ),
+                walk(
+                    Filepathset(
+                        filesdir,
+                        "dir2/notexists",
+                        "dir2/dir1a.txt",
+                        "dir2/dir2a",
+                        "dir2/dir2only.txt",
+                        "notexists.txt"
+                    ).includes(
+                        "dir1/dir2a.txt",
+                        "notexists1"
+                    )
+                ).toSet()
+            )
+        }
+        subtest {
+            val list = walk(
+                Filepathset(
+                    filesdir,
+                    "dir2/notexists",
+                    "dir2/dir1a.txt",
+                    "dir2/dir2a",
+                    "dir2/dir2only.txt",
+                    "dir2/dir2a/file2a.txt",
+                    "notexists.txt"
+                ).includes(
+                    "dir1/dir1a",
+                    "dir1/dir2a.txt",
+                    "dir1/dir1a/file1a.txt",
+                    "notexists1"
+                ), bottomup = true
+            )
+            assertEquals(
+                setOf(
+                    "dir1/dir2a.txt",
+                    "dir2/dir1a.txt",
+                    "dir2/dir2a/file2a.txt",
+                    "dir1/dir1a",
+                    "dir2/dir2a",
+                    "dir1/dir1a/file1a.txt",
+                    "dir2/dir2only.txt"
+                ), list.toSet()
+            )
+            assertTrue(list.indexOf("dir2/dir2a") > list.indexOf("dir2/dir2a/file2a.txt"))
+            assertTrue(list.indexOf("dir1/dir1a") > list.indexOf("dir1/dir1a/file1a.txt"))
+        }
+        subtest {
+            val list = walk(
+                Filepathset(
+                    filesdir,
+                    "dir2/notexists",
+                    "dir2/dir1a.txt",
+                    "dir2/dir2a",
+                    "dir2/dir2only.txt",
+                    "dir2/dir2a/file2a.txt",
+                    "notexists.txt"
+                ).includes(
+                    "dir1/dir1a",
+                    "dir1/dir2a.txt",
+                    "dir1/dir1a/file1a.txt",
+                    "notexists1"
+                )
+            )
+            assertEquals(
+                setOf(
+                    "dir1/dir2a.txt",
+                    "dir2/dir1a.txt",
+                    "dir2/dir2a/file2a.txt",
+                    "dir1/dir1a",
+                    "dir2/dir2a",
+                    "dir1/dir1a/file1a.txt",
+                    "dir2/dir2only.txt"
+                ), list.toSet()
+            )
+            assertTrue(list.indexOf("dir2/dir2a") < list.indexOf("dir2/dir2a/file2a.txt"))
+            assertTrue(list.indexOf("dir1/dir1a") < list.indexOf("dir1/dir1a/file1a.txt"))
         }
     }
 
