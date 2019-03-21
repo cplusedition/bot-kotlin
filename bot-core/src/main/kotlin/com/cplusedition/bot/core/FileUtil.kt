@@ -28,6 +28,8 @@ import java.nio.file.attribute.FileTime
 import java.nio.file.attribute.PosixFilePermission
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import kotlin.coroutines.experimental.SequenceBuilder
+import kotlin.coroutines.experimental.buildSequence
 
 private val SEPCHAR = File.separatorChar // ie. / in unix.
 
@@ -1127,12 +1129,12 @@ open class Treewalker(private val dir: File) {
             collector: FilePathCollector<T>,
             includes: IFilePathPredicate?
         ): Sequence<T> {
-            return sequence {
+            return buildSequence {
                 collect1(dir, dirpath, bottomup, ignoresdir, collector, includes)
             }
         }
 
-        private suspend fun <T> SequenceScope<T>.collect1(
+        private suspend fun <T> SequenceBuilder<T>.collect1(
             dir: File,
             dirpath: String,
             bottomup: Boolean,

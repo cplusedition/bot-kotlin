@@ -18,6 +18,7 @@
 package com.cplusedition.bot.core
 
 import com.cplusedition.bot.core.WithoutUtil.Companion.Without
+import kotlin.coroutines.experimental.buildSequence
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 import kotlin.reflect.full.declaredMemberProperties
@@ -145,7 +146,7 @@ open class ReflectUtil {
      */
     @Throws(Exception::class)
     fun objectProperties(o: Any): Sequence<Property> {
-        return sequence {
+        return buildSequence {
             val c = o::class
             for (it in c.declaredMemberProperties) {
                 if (it.parameters.size > 1) continue

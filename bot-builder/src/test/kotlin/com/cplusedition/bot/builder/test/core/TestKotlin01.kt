@@ -21,6 +21,7 @@ import com.cplusedition.bot.builder.BuilderLogger
 import com.cplusedition.bot.builder.test.zzz.TestBase
 import org.junit.Assert.*
 import org.junit.Test
+import kotlin.coroutines.experimental.buildSequence
 
 class TestKotlin01 : TestBase() {
 
@@ -105,7 +106,7 @@ class TestKotlin01 : TestBase() {
         val node4 = Node(node3, "d")
 
         fun Node.parents(): Sequence<Node> {
-            return sequence<Node> {
+            return buildSequence<Node> {
                 var n: Node? = parent
                 while (n != null) {
                     yield(n)

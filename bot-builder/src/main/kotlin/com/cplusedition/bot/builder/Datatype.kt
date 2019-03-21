@@ -25,6 +25,8 @@ import com.cplusedition.bot.core.MatchUtil.Companion.MatchUt
 import java.io.File
 import java.util.*
 import kotlin.collections.ArrayList
+import kotlin.coroutines.experimental.SequenceBuilder
+import kotlin.coroutines.experimental.buildSequence
 
 //////////////////////////////////////////////////////////////////////
 
@@ -266,7 +268,7 @@ open class Fileset(
         IFilesetCollector<T> {
 
         override fun collect(bottomup: Boolean, includes: IFilePathPredicate?): Sequence<T> {
-            return sequence {
+            return buildSequence {
                 collect1(
                     fileset.dir,
                     fileset.basepath,
@@ -279,7 +281,7 @@ open class Fileset(
             }
         }
 
-        private suspend fun <T> SequenceScope<T>.collect1(
+        private suspend fun SequenceBuilder<T>.collect1(
             dir: File,
             dirpath: String,
             bottomup: Boolean,
@@ -376,7 +378,7 @@ open class Filepathset(
             collector: FilePathCollector<T>,
             predicate: IFilePathPredicate?
         ): Sequence<T> {
-            return sequence {
+            return buildSequence {
                 for (rpath in rpaths) {
                     val file = dir.file(if (dirpath.isEmpty()) rpath else "$dirpath${FileUt.SEPCHAR}$rpath")
                     if (file.exists() && (predicate == null || predicate(file, rpath))) {
