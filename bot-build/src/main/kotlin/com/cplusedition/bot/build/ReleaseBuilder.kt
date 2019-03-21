@@ -78,11 +78,14 @@ class ReleaseBuilder : BuilderBase(true) {
     @Test
     fun updateReleaseVersion() {
         var count = 0
+        val versionPat = Regex("""(?m)^\s*version\s*'([\d.]+)'\s*$""")
+        val kotlinVersionPat = Regex("""(?m)^(\s*ext\.kotlin_version\s*=\s*)'([^']+)'""")
         for (project in Workspace.projects) {
             val buildgradle = project.dir.file("build.gradle")
             if (!buildgradle.exists()) continue
             val modified = With.rewriteText(buildgradle) {
-                it.replace(Regex("""(?mi)^\s*version\s*'([\d.]+)'\s*$"""), "version '$VERSION'")
+                it.replace(versionPat, "version '$VERSION'")
+                    .replace(kotlinVersionPat, "$1'$KOTLIN_VERSION'")
             }
             var msg = "# ${project.gav.artifactId}"
             if (modified) {

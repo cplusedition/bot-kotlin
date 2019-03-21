@@ -29,6 +29,7 @@ open class BuilderBase(debugging: Boolean) : BasicBuilder(Conf(debugging)) {
     companion object {
         const val GROUP = "com.cplusedition.bot"
         const val VERSION = "1.2"
+        const val KOTLIN_VERSION = "1.3.21"
     }
 
     class Conf(debugging: Boolean) : BasicBuilderConf(
