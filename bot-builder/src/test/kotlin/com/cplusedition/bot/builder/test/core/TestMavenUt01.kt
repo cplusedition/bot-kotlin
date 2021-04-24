@@ -19,7 +19,7 @@ package com.cplusedition.bot.builder.test.core
 
 import com.cplusedition.bot.builder.test.zzz.TestBase
 import com.cplusedition.bot.core.MavenUtil.*
-import com.cplusedition.bot.core.RandomUtil.Companion.RandomUt
+import com.cplusedition.bot.core.RandomUt
 import com.cplusedition.bot.core.WithUtil.Companion.With
 import com.cplusedition.bot.core.joinln
 import org.junit.Assert.*

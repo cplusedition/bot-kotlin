@@ -2,8 +2,8 @@ target/
 trash/
 out/
 /build/
+/bin/
 .gradle/
 .idea/
 .attach_pid*
 CHANGES
-

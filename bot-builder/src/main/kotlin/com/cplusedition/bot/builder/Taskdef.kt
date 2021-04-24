@@ -20,8 +20,6 @@ package com.cplusedition.bot.builder
 import com.cplusedition.bot.builder.BuilderUtil.Companion.BU
 import com.cplusedition.bot.core.*
 import com.cplusedition.bot.core.ChecksumUtil.ChecksumKind
-import com.cplusedition.bot.core.FileUtil.Companion.FileUt
-import com.cplusedition.bot.core.TextUtil.Companion.TextUt
 import com.cplusedition.bot.core.WithUtil.Companion.With
 import java.io.File
 import java.nio.file.attribute.FileTime
@@ -44,12 +42,19 @@ interface IBuilderTask<T> : ICoreTask<T> {
     var builder: IBuilder
 }
 
+interface ITaskResult {
+    fun isFailed(): Boolean
+    fun toString(verbose: Boolean): String
+    override fun toString(): String
+}
+
 //////////////////////////////////////////////////////////////////////
 
 /** Tasks that do not depend on builder. */
-abstract class CoreTask<T>(log: ICoreLogger? = null) : ICoreTask<T> {
+abstract class CoreTask<T>(
+        private var _log: ICoreLogger? = null
+) : ICoreTask<T> {
 
-    private var _log: ICoreLogger? = null
     final override var log: ICoreLogger
         get() {
             return _log!!
@@ -59,48 +64,39 @@ abstract class CoreTask<T>(log: ICoreLogger? = null) : ICoreTask<T> {
         }
 
     protected var quiet = false
-
-    init {
-        if (log != null) {
-            this.log = log
-        }
-    }
+    protected var verbose = false
 
     fun setQuiet(b: Boolean): CoreTask<T> {
-        quiet = b
+        this.quiet = b
         return this
+    }
+
+    fun setVerbose(b: Boolean): CoreTask<T> {
+        this.verbose = b
+        return this
+    }
+
+    fun printResult(result: ITaskResult) {
+        if (result.isFailed() || verbose) {
+            log.d(result.toString(true))
+        } else if (!quiet) {
+            log.d(result.toString())
+        }
     }
 }
 
 //////////////////////////////////////////////////////////////////////
 
-abstract class BuilderTask<T>(builder: IBuilder? = null) : IBuilderTask<T> {
+abstract class BuilderTask<T>(
+        private var _builder: IBuilder? = null
+) : CoreTask<T>(_builder?.log), IBuilderTask<T> {
 
-    private var _builder: IBuilder? = null
-    private var _log: ICoreLogger? = null
     final override var builder: IBuilder
         get() = _builder!!
         set(value) {
             _builder = value
             log = builder.log
         }
-    override var log: ICoreLogger
-        get() = _log!!
-        set(value) {
-            _log = value
-        }
-    protected var quiet = false
-
-    init {
-        if (builder != null) {
-            this.builder = builder
-        }
-    }
-
-    fun setQuiet(b: Boolean): BuilderTask<T> {
-        quiet = b
-        return this
-    }
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -124,23 +120,26 @@ open class ResultPrinter(private val withempty: Boolean) {
 //////////////////////////////////////////////////////////////////////
 
 open class Zip(
-    private val zipfile: File,
-    vararg filesets: IFileset
+        private val zipfile: File,
+        vararg filesets: IFileset
 ) : CoreTask<Zip.Result>() {
 
-    private val SEP = '/'
-    private var verbose = false
+    private val sep = File.separatorChar
     private var preserveTimestamp = true
     private val filesets = ArrayList<Pair<String, IFileset>>()
     private lateinit var _result: Result
     val result: Result get() = _result
 
-    companion object {
-        private val emptyByteArray = byteArrayOf()
-    }
+    constructor(zipfile: File, srcdir: File, include: Regex? = null, exclude: Regex? = null) : this(
+            zipfile, Fileset(srcdir, include, exclude)
+    )
 
-    constructor(zipfile: File, srcdir: File, include: String? = null, exclude: String? = null) : this(
-        zipfile, Fileset(srcdir, include, exclude)
+    /**
+     * @param include Include Selector patterns separated by " ,". If not specified, include everything.
+     * @param exclude Optional exclude selector patterns separated by " ,". If not specified excludes nothing.
+     */
+    constructor(zipfile: File, srcdir: File, include: String?, exclude: String? = null) : this(
+            zipfile, Fileset(srcdir, include, exclude)
     )
 
     init {
@@ -154,6 +153,10 @@ open class Zip(
         return this
     }
 
+    /**
+     * @param include Include Selector patterns separated by " ,". If not specified, include everything.
+     * @param exclude Optional exclude selector patterns separated by " ,". If not specified excludes nothing.
+     */
     fun add(dir: File, include: String? = null, exclude: String? = null): Zip {
         this.filesets.add(Pair("", Fileset(dir, include, exclude)))
         return this
@@ -164,7 +167,7 @@ open class Zip(
      */
     fun withPrefix(vararg filesets: IFileset): Zip {
         for (fileset in filesets) {
-            this.filesets.add(Pair(fileset.dir.name + SEP, fileset))
+            this.filesets.add(Pair(fileset.dir.name + sep, fileset))
         }
         return this
     }
@@ -178,11 +181,6 @@ open class Zip(
 
     fun preserveTimestamp(b: Boolean): Zip {
         this.preserveTimestamp = b
-        return this
-    }
-
-    fun setVerbose(b: Boolean): Zip {
-        this.verbose = b
         return this
     }
 
@@ -208,18 +206,16 @@ open class Zip(
             zipfile.delete()
         } else if (_result.fails.size > 0) {
             log.e("# ERROR: File read errors, zip file not created")
-            log.d(_result.fails)
             zipfile.delete()
-        } else if (!quiet) {
-            log.d("# Zip ${zipfile.name}: ${_result.oks.size} files, ${TextUt.decUnit4String(zipfile)}")
         }
+        printResult(_result)
         return _result
     }
 
     private fun zipentry(out: ZipOutputStream, file: File, rpath: String, preservetimestamp: Boolean) {
         val isfile = file.isFile
-        val name = rpath.replace(FileUt.SEPCHAR, SEP)
-        val entry = ZipEntry(if (isfile) name else "$name$SEP")
+        val name = rpath.replace(FileUt.SEPCHAR, sep)
+        val entry = ZipEntry(if (isfile) name else "$name$sep")
         if (preservetimestamp) {
             val time = FileTime.fromMillis(file.lastModified())
             entry.creationTime = time
@@ -231,19 +227,23 @@ open class Zip(
         }
     }
 
-    class Result(val zipfile: File) {
+    class Result(val zipfile: File) : ITaskResult {
         val oks = ArrayList<String>()
         val fails = ArrayList<String>()
 
-        override fun toString(): String {
-            return toString(false, true)
+        override fun isFailed(): Boolean {
+            return oks.size == 0 || fails.size > 0
         }
 
-        fun toString(oks: Boolean = false, fails: Boolean = true): String {
+        override fun toString(): String {
+            return "# Zip ${zipfile.name}: ${TextUt.decUnit4String(zipfile)}: ${oks.size} OK, ${fails.size} failed"
+        }
+
+        override fun toString(verbose: Boolean): String {
             return with(ResultPrinter(true)) {
-                ret.println("# ${zipfile.name}: ${TextUt.decUnit4String(zipfile)}")
-                print(oks, "# OK", this@Result.oks)
-                print(fails, "# Failed", this@Result.fails)
+                ret.println("# Zip ${zipfile.name}: ${TextUt.decUnit4String(zipfile)}")
+                print(verbose, "# OK", this@Result.oks)
+                print(true, "# Failed", this@Result.fails)
                 toString()
             }
         }
@@ -253,8 +253,8 @@ open class Zip(
 //////////////////////////////////////////////////////////////////////
 
 open class Copy(
-    private val dstdir: File,
-    vararg filesets: IFileset
+        private val dstdir: File,
+        vararg filesets: IFileset
 ) : CoreTask<Copy.Result>() {
 
     private val filesets = ArrayList<IFileset>()
@@ -262,8 +262,16 @@ open class Copy(
     private lateinit var _result: Result
     val result: Result get() = _result
 
-    constructor(dstdir: File, srcdir: File, include: String? = null, exclude: String? = null) : this(
-        dstdir, Fileset(srcdir, include, exclude)
+    constructor(dstdir: File, srcdir: File, include: Regex? = null, exclude: Regex? = null) : this(
+            dstdir, Fileset(srcdir, include, exclude)
+    )
+
+    /**
+     * @param include Include Selector patterns separated by " ,". If not specified, include everything.
+     * @param exclude Optional exclude selector patterns separated by " ,". If not specified excludes nothing.
+     */
+    constructor(dstdir: File, srcdir: File, include: String?, exclude: String? = null) : this(
+            dstdir, Fileset(srcdir, include, exclude)
     )
 
     init {
@@ -281,6 +289,10 @@ open class Copy(
         return this
     }
 
+    /**
+     * @param include Include Selector patterns separated by " ,". If not specified, include everything.
+     * @param exclude Optional exclude selector patterns separated by " ,". If not specified excludes nothing.
+     */
     fun add(dir: File, include: String? = null, exclude: String? = null): Copy {
         this.filesets.add(Fileset(dir, include, exclude))
         return this
@@ -305,24 +317,26 @@ open class Copy(
                 }
             }
         }
-        if (!quiet) {
-            log.d("# Copy: ${_result.copied.size} OK, ${_result.copyFailed.size} failed")
-        }
+        printResult(_result)
         return _result
     }
 
-    class Result {
+    class Result : ITaskResult {
         val copied = ArrayList<String>()
         val copyFailed = ArrayList<String>()
 
-        override fun toString(): String {
-            return toString(false, true)
+        override fun isFailed(): Boolean {
+            return copyFailed.size > 0
         }
 
-        fun toString(copied: Boolean = false, failed: Boolean = true): String {
+        override fun toString(): String {
+            return "# Copy: ${copied.size} OK, ${copyFailed.size} failed"
+        }
+
+        override fun toString(verbose: Boolean): String {
             return with(ResultPrinter(true)) {
-                print(copied, "# Copied", this@Result.copied)
-                print(failed, "# Copy failed", copyFailed)
+                print(verbose, "# Copied", this@Result.copied)
+                print(true, "# Copy failed", copyFailed)
                 toString()
             }
         }
@@ -335,8 +349,8 @@ open class Copy(
  * Like Copy but only copy files that are dffer if destination exists.
  */
 open class CopyDiff(
-    private val dstdir: File,
-    vararg filesets: IFileset
+        private val dstdir: File,
+        vararg filesets: IFileset
 ) : CoreTask<CopyDiff.Result>() {
 
     private val filesets = ArrayList<IFileset>()
@@ -344,8 +358,16 @@ open class CopyDiff(
     private lateinit var _result: Result
     val result: Result get() = _result
 
-    constructor(dstdir: File, srcdir: File, include: String? = null, exclude: String? = null) : this(
-        dstdir, Fileset(srcdir, include, exclude)
+    constructor(dstdir: File, srcdir: File, include: Regex? = null, exclude: Regex? = null) : this(
+            dstdir, Fileset(srcdir, include, exclude)
+    )
+
+    /**
+     * @param include Include Selector patterns separated by " ,". If not specified, include everything.
+     * @param exclude Optional exclude selector patterns separated by " ,". If not specified excludes nothing.
+     */
+    constructor(dstdir: File, srcdir: File, include: String?, exclude: String? = null) : this(
+            dstdir, Fileset(srcdir, include, exclude)
     )
 
     init {
@@ -363,6 +385,10 @@ open class CopyDiff(
         return this
     }
 
+    /**
+     * @param include Include Selector patterns separated by " ,". If not specified, include everything.
+     * @param exclude Optional exclude selector patterns separated by " ,". If not specified excludes nothing.
+     */
     fun add(dir: File, include: String? = null, exclude: String? = null): CopyDiff {
         this.filesets.add(Fileset(dir, include, exclude))
         return this
@@ -391,22 +417,28 @@ open class CopyDiff(
                 }
             }
         }
-        if (!quiet) {
-            log.d("# Copy: ${_result.copied.size} OK, ${_result.notCopied.size} not copied, ${_result.copyFailed.size} failed")
-        }
+        printResult(_result)
         return _result
     }
 
-    class Result {
+    class Result : ITaskResult {
         val notCopied = ArrayList<String>()
         val copied = ArrayList<String>()
         val copyFailed = ArrayList<String>()
 
-        override fun toString(): String {
-            return toString(false, true, true)
+        override fun isFailed(): Boolean {
+            return copyFailed.size > 0
         }
 
-        fun toString(notcopied: Boolean = false, copied: Boolean = true, failed: Boolean = true): String {
+        override fun toString(): String {
+            return "# CopyDiff: ${copied.size} OK, ${notCopied.size} not copied, ${copyFailed.size} failed"
+        }
+
+        override fun toString(verbose: Boolean): String {
+            return toString(verbose, copied = true, failed = true)
+        }
+
+        fun toString(notcopied: Boolean, copied: Boolean, failed: Boolean): String {
             return with(ResultPrinter(true)) {
                 print(notcopied, "# Not copied", notCopied)
                 print(copied, "# Copied", this@Result.copied)
@@ -423,8 +455,8 @@ open class CopyDiff(
  * Like CopyDiff but delete extra destination files that are not part of the source fileset.
  */
 open class CopyMirror(
-    private val dstdir: File,
-    private val fileset: IFileset
+        private val dstdir: File,
+        private val fileset: IFileset
 ) : CoreTask<CopyMirror.Result>() {
 
     private var preservePredicates = ArrayList<IFilePathPredicate>()
@@ -432,9 +464,18 @@ open class CopyMirror(
     private lateinit var _result: Result
     val result: Result get() = _result
 
-    constructor(dstdir: File, srcdir: File, include: String? = null, exclude: String? = null) : this(
-        dstdir,
-        Fileset(srcdir, include, exclude)
+    constructor(dstdir: File, srcdir: File, include: Regex? = null, exclude: Regex? = null) : this(
+            dstdir,
+            Fileset(srcdir, include, exclude)
+    )
+
+    /**
+     * @param include Include Selector patterns separated by " ,". If not specified, include everything.
+     * @param exclude Optional exclude selector patterns separated by " ,". If not specified excludes nothing.
+     */
+    constructor(dstdir: File, srcdir: File, include: String?, exclude: String? = null) : this(
+            dstdir,
+            Fileset(srcdir, include, exclude)
     )
 
     init {
@@ -452,7 +493,7 @@ open class CopyMirror(
     }
 
     override fun run(): CopyMirror.Result {
-        _result = Result()
+        _result = Result(dstdir)
         fileset.walk { file, rpath ->
             try {
                 val dstfile = File(dstdir, rpath)
@@ -473,44 +514,33 @@ open class CopyMirror(
             }
         }
         val srcdir = fileset.dir
-        dstdir.walker.bottomUp().walk { file, rpath ->
+        dstdir.ut.walk(bottomup = true) { file, rpath ->
             if (srcdir.file(rpath).exists()) return@walk
             if (file.isDirectory) {
                 _result.extraDirs.add(rpath)
                 if (preservePredicates.any { it(file, rpath) }) return@walk
-                if (file.listOrEmpty().isEmpty() && file.delete()) _result.extraDirsRemoved.add(rpath)
-                else _result.extraDirsRemoveFailed.add(rpath)
+                if (file.listOrEmpty().isEmpty() && file.delete()) {
+                    _result.extraDirsRemoved.add(rpath)
+                } else {
+                    log.e("# ERROR: Removing $rpath")
+                    _result.extraDirsRemoveFailed.add(rpath)
+                }
             } else {
                 _result.extraFiles.add(rpath)
                 if (preservePredicates.any { it(file, rpath) }) return@walk
-                if (file.delete()) _result.extraFilesRemoved.add(rpath) else _result.extraFilesRemoveFailed.add(rpath)
+                if (file.delete()) {
+                    _result.extraFilesRemoved.add(rpath)
+                } else {
+                    log.e("# ERROR: Removing $rpath")
+                    _result.extraFilesRemoveFailed.add(rpath)
+                }
             }
         }
-        if (!quiet) {
-            with(_result) {
-                log.d("# Copy: ${copied.size} OK, ${notCopied.size} not copied, ${copyFailed.size} failed")
-                log.d(
-                    "# Remove extras: ${extraFilesRemoved.size} files OK, ${extraDirsRemoved.size} dirs OK, " +
-                            "${extraFilesRemoveFailed.size} files failed, ${extraDirsRemoveFailed.size} dirs failed"
-                )
-            }
-        }
-        with(_result.extraFilesRemoveFailed) {
-            if (size > 0) {
-                log.e("# ERROR: Removing $size extra files")
-                log.d(this)
-            }
-        }
-        with(_result.extraDirsRemoveFailed) {
-            if (size > 0) {
-                log.e("# ERROR: Removing $size extra dirs")
-                log.d(this)
-            }
-        }
+        printResult(_result)
         return _result
     }
 
-    class Result {
+    class Result(private val dstdir: File) : ITaskResult {
         val extraFiles = TreeSet<String>(reverseOrder())
         val extraDirs = TreeSet<String>(reverseOrder())
         val extraFilesRemoved = TreeSet<String>(reverseOrder())
@@ -521,57 +551,54 @@ open class CopyMirror(
         val copied = ArrayList<String>()
         val copyFailed = ArrayList<String>()
 
+        override fun isFailed(): Boolean {
+            return copyFailed.size > 0 || extraFilesRemoveFailed.size > 0 || extraDirsRemoveFailed.size > 0
+        }
+
         override fun toString(): String {
-            return toString(false)
+            return with(ResultPrinter(false)) {
+                println("# CopyMirror: ${dstdir}:")
+                print(true, "# Extra files", extraFiles)
+                println("# Remove extras: ${extraFilesRemoved.size} files OK, ${extraDirsRemoved.size} dirs OK, " +
+                        "${extraFilesRemoveFailed.size} files failed, ${extraDirsRemoveFailed.size} dirs failed\n" +
+                        "# Copy: ${copied.size} OK, ${notCopied.size} not copied, ${copyFailed.size} failed")
+            }.toString()
         }
 
-        /** Default prints everything except not copied. */
-        fun toString(
-            notcopied: Boolean = false,
-            extras: Boolean = true,
-            extrasremoved: Boolean = true,
-            copied: Boolean = true,
-            failed: Boolean = true,
-            withempty: Boolean = true
-        ): String {
-            return tostring(
-                notcopied,
-                extras,
-                extrasremoved,
-                copied,
-                failed,
-                withempty
-            )
+        override fun toString(verbose: Boolean): String {
+            return tostring(verbose, true, true, true, true, verbose)
         }
 
-        /** Default prints nothing. */
+        /** Default prints summary only. */
         fun toString0(
-            notcopied: Boolean = false,
-            extras: Boolean = false,
-            extrasremoved: Boolean = false,
-            copied: Boolean = false,
-            failed: Boolean = false,
-            withempty: Boolean = true
+                notcopied: Boolean = false,
+                extras: Boolean = false,
+                extrasremoved: Boolean = false,
+                copied: Boolean = false,
+                failed: Boolean = false,
+                withempty: Boolean = true
         ): String {
             return tostring(
-                notcopied,
-                extras,
-                extrasremoved,
-                copied,
-                failed,
-                withempty
+                    notcopied,
+                    extras,
+                    extrasremoved,
+                    copied,
+                    failed,
+                    withempty
             )
         }
 
+        /** Set argument to true to print details of result. */
         private fun tostring(
-            notcopied: Boolean,
-            extras: Boolean,
-            extrasremoved: Boolean,
-            copied: Boolean,
-            failed: Boolean,
-            withempty: Boolean
+                notcopied: Boolean,
+                extras: Boolean,
+                extrasremoved: Boolean,
+                copied: Boolean,
+                failed: Boolean,
+                withempty: Boolean
         ): String {
             return with(ResultPrinter(withempty)) {
+                println("# CopyMirror: ${dstdir}:")
                 print(notcopied, "# Not copied", notCopied)
                 print(extras, "# Extra files", extraFiles)
                 print(extras, "# Extra dirs", extraDirs)
@@ -594,7 +621,13 @@ open class Remove(vararg filesets: IFileset) : CoreTask<Remove.Result>() {
     private lateinit var _result: Result
     val result: Result get() = _result
 
-    constructor(dir: File, include: String? = null, exclude: String? = null) : this(Fileset(dir, include, exclude))
+    constructor(dir: File, include: Regex? = null, exclude: Regex? = null) : this(Fileset(dir, include, exclude))
+
+    /**
+     * @param include Include Selector patterns separated by " ,". If not specified, include everything.
+     * @param exclude Optional exclude selector patterns separated by " ,". If not specified excludes nothing.
+     */
+    constructor(dir: File, include: String?, exclude: String? = null) : this(Fileset(dir, include, exclude))
 
     init {
         this.filesets.addAll(filesets)
@@ -605,7 +638,15 @@ open class Remove(vararg filesets: IFileset) : CoreTask<Remove.Result>() {
         return this
     }
 
-    fun add(dir: File, include: String? = null, exclude: String? = null): Remove {
+    fun add(dir: File, include: Regex? = null, exclude: Regex? = null): Remove {
+        return add(Fileset(dir, include, exclude))
+    }
+
+    /**
+     * @param include Include Selector patterns separated by " ,". If not specified, include everything.
+     * @param exclude Optional exclude selector patterns separated by " ,". If not specified excludes nothing.
+     */
+    fun add(dir: File, include: String?, exclude: String? = null): Remove {
         return add(Fileset(dir, include, exclude))
     }
 
@@ -631,16 +672,10 @@ open class Remove(vararg filesets: IFileset) : CoreTask<Remove.Result>() {
                 }
             }
         }
-        with(_result) {
-            if (filesFailed.size + dirsFailed.size > 0) {
-                log.e(
-                    "# ERROR: Remove: ${filesOK.size} files OK, ${dirsOK.size} dirs OK, " +
-                            "${filesFailed.size} files failed, ${dirsFailed.size} dirs failed"
-                )
-            } else if (!quiet) {
-                log.d("# Remove: ${filesOK.size} files OK, ${dirsOK.size} dirs OK")
-            }
+        if (_result.isFailed()) {
+            log.e("# ERROR: Remove: ${_result.filesFailed.size} files failed, ${_result.dirsFailed.size} dirs failed")
         }
+        printResult(_result)
         return _result
     }
 
@@ -662,7 +697,7 @@ open class Remove(vararg filesets: IFileset) : CoreTask<Remove.Result>() {
         }
     }
 
-    class Result {
+    class Result : ITaskResult {
         val filesOK = ArrayList<String>()
         val dirsOK = ArrayList<String>()
         val filesFailed = ArrayList<String>()
@@ -671,16 +706,20 @@ open class Remove(vararg filesets: IFileset) : CoreTask<Remove.Result>() {
         val okCount get() = filesOK.size + dirsOK.size
         val failedCount get() = filesFailed.size + dirsFailed.size
 
-        override fun toString(): String {
-            return toString(false, true)
+        override fun isFailed(): Boolean {
+            return filesFailed.size > 0 || dirsFailed.size > 0
         }
 
-        fun toString(oks: Boolean = false, fails: Boolean = true): String {
+        override fun toString(): String {
+            return "# Remove: ${filesOK.size} files OK, ${dirsOK.size} dirs OK"
+        }
+
+        override fun toString(verbose: Boolean): String {
             return with(ResultPrinter(true)) {
-                print(oks, "# Remove file OK", filesOK)
-                print(oks, "# Remove dir OK", dirsOK)
-                print(fails, "# Remove file failed", filesFailed)
-                print(fails, "# Remove dir failed", dirsFailed)
+                print(verbose, "# Remove file OK", filesOK)
+                print(verbose, "# Remove dir OK", dirsOK)
+                print(true, "# Remove file failed", filesFailed)
+                print(true, "# Remove dir failed", dirsFailed)
                 toString()
             }
         }
@@ -690,32 +729,48 @@ open class Remove(vararg filesets: IFileset) : CoreTask<Remove.Result>() {
 //////////////////////////////////////////////////////////////////////
 
 open class Checksum(
-    val sumfile: File,
-    val kind: ChecksumKind,
-    private val fileset: IFileset
+        private val sumfile: File,
+        val kind: ChecksumKind,
+        private val fileset: IFileset
 ) : CoreTask<Checksum.Result>() {
 
     private lateinit var _result: Result
     val result: Result get() = _result
 
     constructor(
-        sumfile: File,
-        kind: ChecksumKind,
-        srcdir: File,
-        include: String? = null,
-        exclude: String? = null
+            sumfile: File,
+            kind: ChecksumKind,
+            srcdir: File,
+            include: Regex? = null,
+            exclude: Regex? = null
     ) : this(
-        sumfile, kind, Fileset(srcdir, include, exclude)
+            sumfile, kind, Fileset(srcdir, include, exclude)
+    )
+
+    /**
+     * @param include Include Selector patterns separated by " ,". If not specified, include everything.
+     * @param exclude Optional exclude selector patterns separated by " ,". If not specified excludes nothing.
+     */
+    constructor(
+            sumfile: File,
+            kind: ChecksumKind,
+            srcdir: File,
+            include: String?,
+            exclude: String? = null
+    ) : this(
+            sumfile, kind, Fileset(srcdir, include, exclude)
     )
 
     override fun run(): Checksum.Result {
         _result = Result(sumfile, kind)
-        WithUtil.With.bufferedWriter(sumfile) { writer ->
+        With.bufferedWriter(sumfile) { writer ->
             fileset.walk { file, rpath ->
-                if (!file.isFile) { return@walk }
+                if (!file.isFile) {
+                    return@walk
+                }
                 try {
                     val digester = MessageDigest.getInstance(kind.algorithm)
-                    WithUtil.With.bytes(file, 4 * 1024 * 1024) { buf, len ->
+                    With.bytes(file, 4 * 1024 * 1024) { buf, len ->
                         digester.update(buf, 0, len)
                     }
                     val digest = digester.digest()
@@ -728,13 +783,11 @@ open class Checksum(
                 }
             }
         }
-        if (_result.fails.size > 0) {
+        if (_result.isFailed()) {
             log.e("# ERROR: $kind: ${_result.oks.size} OK, ${_result.fails.size} failed, checksum file not created")
-            log.d(_result.fails)
             sumfile.delete()
-        } else if (!quiet) {
-            log.d("# $kind: ${_result.oks.size} OK")
         }
+        printResult(_result)
         return _result
     }
 
@@ -745,11 +798,24 @@ open class Checksum(
         }
     }
 
-    class Result(val sumfile: File, val kind: ChecksumKind) {
+    class Result(val sumfile: File, val kind: ChecksumKind) : ITaskResult {
         var oks = ArrayList<String>()
         var fails = ArrayList<String>()
+
+        override fun isFailed(): Boolean {
+            return fails.size > 0
+        }
+
         override fun toString(): String {
-            return "# $kind ${oks.size} OK" + (if (fails.size == 0) "" else ", ${fails.size} failed")
+            return "# Checksum: $kind ${oks.size} OK" + (if (fails.size == 0) "" else ", ${fails.size} failed")
+        }
+
+        override fun toString(verbose: Boolean): String {
+            return with(ResultPrinter(true)) {
+                print(verbose, "# OK", oks)
+                print(true, "# Failed", fails)
+                toString()
+            }
         }
     }
 }
@@ -757,9 +823,9 @@ open class Checksum(
 //////////////////////////////////////////////////////////////////////
 
 open class VerifyChecksum(
-    private val sumfile: File,
-    private val kind: ChecksumKind,
-    private val basedir: File? = null
+        private val sumfile: File,
+        private val kind: ChecksumKind,
+        private val basedir: File? = null
 ) : CoreTask<VerifyChecksum.Result>() {
 
     private val BUFSIZE = 256 * 1024
@@ -773,7 +839,7 @@ open class VerifyChecksum(
     }
 
     override fun run(): VerifyChecksum.Result {
-        _result = Result(kind)
+        _result = Result(kind, _allowNotExists)
         val dir = basedir ?: sumfile.parentFile
         kind.readChecksums(sumfile) { sumandpath, line ->
             ++_result.total
@@ -797,7 +863,7 @@ open class VerifyChecksum(
                 val sum = sumandpath.sum
                 val expected = Hex.decode(sum)
                 val digester = MessageDigest.getInstance(kind.algorithm)
-                WithUtil.With.bytes(file, BUFSIZE) { buf, len ->
+                With.bytes(file, BUFSIZE) { buf, len ->
                     digester.update(buf, 0, len)
                 }
                 val actual = digester.digest()
@@ -820,18 +886,31 @@ open class VerifyChecksum(
         return _result
     }
 
-    class Result(private val kind: ChecksumKind) {
+    class Result(private val kind: ChecksumKind, private val _allowNotExists: Boolean) : ITaskResult {
         val invalids = ArrayList<String>()
         val notexists = ArrayList<String>()
         val fails = ArrayList<String>()
         val oks = ArrayList<String>()
         var total = 0
 
+        override fun isFailed(): Boolean {
+            return fails.size > 0 || invalids.size > 0 || _allowNotExists && notexists.size > 0
+        }
+
         override fun toString(): String {
-            return "# Verify $kind: $total total, ${oks.size} OK, ${notexists.size} not exists, ${invalids.size} invalid, ${fails.size} failed"
+            return "# Verify: $kind: $total total, ${oks.size} OK, ${notexists.size} not exists, ${invalids.size} invalid, ${fails.size} failed"
+        }
+
+        override fun toString(verbose: Boolean): String {
+            return with(ResultPrinter(true)) {
+                print(verbose, "# OK", oks)
+                print(verbose, "# Not exists", notexists)
+                print(true, "# Invalid", invalids)
+                print(true, "# Failed", fails)
+                toString()
+            }
         }
     }
 }
 
 //////////////////////////////////////////////////////////////////////
-

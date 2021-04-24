@@ -19,16 +19,28 @@ package com.cplusedition.bot.core
 
 import java.util.*
 
-open class StructUtil {
+object StructUt : StructUtil()
 
-    companion object {
-        val StructUt = StructUtil()
-    }
+open class StructUtil {
 
     fun <T> concat(vararg a: Collection<T>): MutableList<T> {
         val ret = ArrayList<T>()
         for (c in a) {
             ret.addAll(c)
+        }
+        return ret
+    }
+
+    fun concat(vararg aa: ByteArray): ByteArray {
+        var len = 0
+        for (a in aa) {
+            len += a.size
+        }
+        val ret = ByteArray(len)
+        var offset = 0
+        for (a in aa) {
+            System.arraycopy(a, 0, ret, offset, a.size)
+            offset += a.size
         }
         return ret
     }
@@ -168,12 +180,12 @@ open class DiffStat<T : Comparable<T>> {
     }
 
     fun toString(
-        msg1: String,
-        msg2: String,
-        printsames: Boolean = false,
-        printaonly: Boolean = true,
-        printbonly: Boolean = true,
-        printdiffs: Boolean = true
+            msg1: String,
+            msg2: String,
+            printsames: Boolean = false,
+            printaonly: Boolean = true,
+            printbonly: Boolean = true,
+            printdiffs: Boolean = true
     ): String {
         val w = StringPrintWriter()
         if (printsames) {

@@ -21,7 +21,7 @@ import com.cplusedition.bot.builder.test.zzz.TestBase
 import com.cplusedition.bot.core.ChecksumUtil
 import com.cplusedition.bot.core.ChecksumUtil.ChecksumKind
 import com.cplusedition.bot.core.Hex
-import com.cplusedition.bot.core.RandomUtil.Companion.RandomUt
+import com.cplusedition.bot.core.RandomUt
 import com.cplusedition.bot.core.WithUtil.Companion.With
 import com.cplusedition.bot.core.file
 import org.junit.Assert.*
@@ -33,7 +33,7 @@ class TestChecksumUt01 : TestBase() {
 
     @Test
     fun testBasic01() {
-        assertTrue(With.exception {
+        assertTrue(With.exceptionOrNull {
             ChecksumKind.valueOf("SHA123")
         } is IllegalArgumentException)
         assertEquals(ChecksumKind.MD5, ChecksumKind.valueOf("MD5"))
@@ -78,7 +78,7 @@ class TestChecksumUt01 : TestBase() {
                 datafile.writeBytes(data)
                 sumfile.writeText("SHA123($sumfile.name) = $hex")
                 val line = sumfile.readText()
-                assertTrue(With.exception { ChecksumKind.readChecksum1(line, kind) } is IOException)
+                assertTrue(With.exceptionOrNull { ChecksumKind.readChecksum1(line, kind) } is IOException)
             } finally {
                 datafile.delete()
                 sumfile.delete()
@@ -153,7 +153,7 @@ class TestChecksumUt01 : TestBase() {
             try {
                 datafile.writeBytes(data)
                 sumfile.writeText("${sumfile.name} $hex")
-                assertTrue(With.exception { kind.read(sumfile, datafile) } is IOException)
+                assertTrue(With.exceptionOrNull { kind.read(sumfile, datafile) } is IOException)
             } finally {
                 datafile.delete()
                 sumfile.delete()

@@ -19,9 +19,6 @@ package com.cplusedition.bot.builder.test.core
 
 import com.cplusedition.bot.builder.test.zzz.TestBase
 import com.cplusedition.bot.core.*
-import com.cplusedition.bot.core.IOUtil.Companion.IOUt
-import com.cplusedition.bot.core.RandomUtil.Companion.RandomUt
-import com.cplusedition.bot.core.StructUtil.Companion.StructUt
 import com.cplusedition.bot.core.WithUtil.Companion.With
 import org.junit.Assert.*
 import org.junit.Test
@@ -85,8 +82,8 @@ class TestIOUt01 : TestBase() {
             )
             assertEquals(0xff, ByteReader(byteArrayOf(-1)).u8())
             assertEquals("testing\u20221234", ByteReader("testing\u20221234".toByteArray()).utf8(14).toString())
-            assertTrue(With.exception { ByteReader(byteArrayOf()).read() } is EOFException)
-            assertTrue(With.exception { ByteReader(byteArrayOf(1, 2, 3)).i32BE() } is EOFException)
+            assertTrue(With.exceptionOrNull { ByteReader(byteArrayOf()).read() } is EOFException)
+            assertTrue(With.exceptionOrNull { ByteReader(byteArrayOf(1, 2, 3)).i32BE() } is EOFException)
         }
 
         subtest {
@@ -116,12 +113,12 @@ class TestIOUt01 : TestBase() {
             val data = RandomUt.get(ByteArray(100))
             val input = ByteArrayInputStream(data)
             val output = ByteArray(123)
-            assertTrue(With.exception { IOUt.readFully(input, output) } is EOFException)
+            assertTrue(With.exceptionOrNull { IOUt.readFully(input, output) } is EOFException)
         }
         subtest {
             val data = RandomUt.get(ByteArray(100))
             val input = ByteArrayInputStream(data)
-            assertTrue(With.exception { IOUt.skipFully(input, 123) } is EOFException)
+            assertTrue(With.exceptionOrNull { IOUt.skipFully(input, 123) } is EOFException)
         }
         subtest {
             val data = RandomUt.get(ByteArray(1000))

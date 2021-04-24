@@ -17,9 +17,6 @@
 
 package com.cplusedition.bot.core
 
-import com.cplusedition.bot.core.DateUtil.Companion.DateUt
-import com.cplusedition.bot.core.FileUtil.Companion.FileUt
-import com.cplusedition.bot.core.TextUtil.Companion.TextUt
 import com.cplusedition.bot.core.WithUtil.Companion.With
 import org.w3c.dom.Element
 import org.w3c.dom.Node
@@ -101,6 +98,13 @@ fun <K, V> MutableMap<K, V>.add(map: Map<K, V>): MutableMap<K, V> {
     return this
 }
 
+fun <K, V> MutableMap<K, V>.add(key: K, value: V): MutableMap<K, V> {
+    if (value != null) {
+        this[key] = value
+    }
+    return this
+}
+
 fun <T> Array<T>.join(sep: CharSequence): String {
     return this.iterator().join(sep)
 }
@@ -130,7 +134,7 @@ fun NodeList.nodes(): Iterable<Node> {
 }
 
 class ElementListIterable(
-    private val list: NodeList
+        private val list: NodeList
 ) : Iterable<Element>, Iterator<Element> {
     var length = list.length
     private var index = 0
@@ -148,7 +152,7 @@ class ElementListIterable(
 }
 
 class NodeListElementIterable(
-    private val list: NodeList
+        private val list: NodeList
 ) : Iterable<Element>, Iterator<Element> {
     var length = list.length
     private var index = 0
@@ -188,7 +192,7 @@ class NodeListElementIterable(
 }
 
 class NodeListIterable(
-    private val list: NodeList
+        private val list: NodeList
 ) : Iterable<Node>, Iterator<Node> {
     var length = list.length
     private var index = 0
@@ -212,10 +216,19 @@ open class WithUtil {
         val With = WithUtil()
     }
 
+    fun exceptionOrFalse(code: Fun00): Boolean {
+        return try {
+            code()
+            false
+        } catch (e: Exception) {
+            true
+        }
+    }
+
     /**
      * @return The exception or null.
      */
-    fun exception(code: Fun00): Exception? {
+    fun exceptionOrNull(code: Fun00): Exception? {
         return try {
             code()
             null
@@ -241,7 +254,7 @@ open class WithUtil {
     /**
      * @return the throwable thrown by the code or null.
      */
-    fun throwable(code: Fun00): Throwable? {
+    fun throwableOrNull(code: Fun00): Throwable? {
         return try {
             code()
             null
@@ -264,157 +277,61 @@ open class WithUtil {
         throw IllegalStateException()
     }
 
+    fun <T : Closeable, R> closeable(target: T, code: Fun11<T, R>): R {
+        return target.use(code)
+    }
+
+    //    fun <T : Closeable, R> closeable(target: T, code: Fun11<T, R>): R {
+    //        try {
+    //            return code(target)
+    //        } finally {
+    //            FileUt.close(target)
+    //        }
+    //    }
+
     @Throws(IOException::class)
-    fun inputStream(file: File, code: Fun10<InputStream>) {
-        var input: InputStream? = null
-        try {
-            input = FileInputStream(file)
-            code(input)
-        } finally {
-            FileUt.close(input)
-        }
+    fun <R> inputStream(file: File, code: Fun11<InputStream, R>): R {
+        return FileInputStream(file).use(code)
     }
 
     @Throws(IOException::class)
-    fun <T> inputStream(file: File, code: Fun11<InputStream, T>): T {
-        var input: InputStream? = null
-        try {
-            input = FileInputStream(file)
-            return code(input)
-        } finally {
-            FileUt.close(input)
-        }
+    fun <R> outputStream(file: File, code: Fun11<OutputStream, R>): R {
+        return FileOutputStream(file).use(code)
     }
 
     @Throws(IOException::class)
-    fun inputStream(input: InputStream?, code: Fun10<InputStream>) {
-        try {
-            if (input != null) {
-                code(input)
-            }
-        } finally {
-            FileUt.close(input)
-        }
-    }
-
-    @Throws(IOException::class)
-    fun <T> inputStream(input: InputStream, code: Fun11<InputStream, T>): T {
-        try {
-            return code(input)
-        } finally {
-            FileUt.close(input)
-        }
-    }
-
-    @Throws(IOException::class)
-    fun outputStream(file: File, code: Fun10<OutputStream>) {
-        var output: OutputStream? = null
-        try {
-            output = FileOutputStream(file)
-            code(output)
-        } finally {
-            FileUt.close(output)
-        }
-    }
-
-    @Throws(IOException::class)
-    fun <T> outputStream(file: File, code: Fun11<OutputStream, T>): T {
-        var output: OutputStream? = null
-        try {
-            output = FileOutputStream(file)
-            return code(output)
-        } finally {
-            FileUt.close(output)
-        }
-    }
-
-    @Throws(IOException::class)
-    fun outputStream(output: OutputStream?, code: Fun10<OutputStream>) {
-        try {
-            if (output != null) {
-                code(output)
-            }
-        } finally {
-            FileUt.close(output)
-        }
-    }
-
-    @Throws(IOException::class)
-    fun <T> outputStream(output: OutputStream, code: Fun11<OutputStream, T>): T {
-        try {
-            return code(output)
-        } finally {
-            FileUt.close(output)
-        }
+    fun <R> printWriter(file: File, code: Fun11<PrintWriter, R>): R {
+        return PrintWriter(file).use(code)
     }
 
     @Throws(IOException::class)
     fun zipInputStream(zipfile: File, code: Fun20<ZipInputStream, ZipEntry>) {
-        var zipinput: ZipInputStream? = null
-        var input: InputStream? = null
-        try {
-            input = BufferedInputStream(FileInputStream(zipfile))
-            zipinput = ZipInputStream(input)
+        ZipInputStream(BufferedInputStream(FileInputStream(zipfile))).use { zipinput ->
             while (true) {
                 val entry = zipinput.nextEntry ?: break
                 code(zipinput, entry)
             }
-        } finally {
-            FileUt.close(zipinput)
-            FileUt.close(input)
         }
     }
 
     @Throws(IOException::class)
     fun zipOutputStream(zipfile: File, code: Fun10<ZipOutputStream>) {
-        var zipout: ZipOutputStream? = null
-        var out: OutputStream? = null
-        try {
-            out = BufferedOutputStream(FileOutputStream(zipfile))
-            zipout = ZipOutputStream(out)
-            code(zipout)
-        } finally {
-            FileUt.close(zipout)
-            FileUt.close(out)
-        }
-    }
-
-    @Throws(IOException::class)
-    fun printWriter(file: File, charset: Charset = Charsets.UTF_8, code: Fun10<PrintWriter>) {
-        var writer: PrintWriter? = null
-        try {
-            writer = PrintWriter(file, charset.name())
-            code(writer)
-        } finally {
-            FileUt.close(writer)
-        }
+        ZipOutputStream(BufferedOutputStream(FileOutputStream(zipfile))).use(code)
     }
 
     @Throws(IOException::class)
     fun bufferedWriter(file: File, charset: Charset = Charsets.UTF_8, code: Fun10<BufferedWriter>) {
-        var writer: BufferedWriter? = null
-        try {
-            writer = BufferedWriter(OutputStreamWriter(FileOutputStream(file), charset))
-            code(writer)
-        } finally {
-            FileUt.close(writer)
-        }
+        BufferedWriter(OutputStreamWriter(FileOutputStream(file), charset)).use(code)
     }
 
     @Throws(IOException::class)
     fun bufferedReader(file: File, charset: Charset = Charsets.UTF_8, code: Fun10<BufferedReader>) {
-        var reader: BufferedReader? = null
-        try {
-            reader = BufferedReader(InputStreamReader(FileInputStream(file), charset))
-            code(reader)
-        } finally {
-            FileUt.close(reader)
-        }
+        BufferedReader(InputStreamReader(FileInputStream(file), charset)).use(code)
     }
 
     @Throws(IOException::class)
     fun bytes(file: File, bufsize: Int = K.BUFSIZE, code: Fun20<ByteArray, Int>) {
-        inputStream(file) { input ->
+        FileInputStream(file).use { input ->
             val buf = ByteArray(bufsize)
             while (true) {
                 val n = input.read(buf)
@@ -428,15 +345,11 @@ open class WithUtil {
 
     @Throws(IOException::class)
     fun lines(file: File, charset: Charset = Charsets.UTF_8, code: Fun10<String>) {
-        var reader: BufferedReader? = null
-        try {
-            reader = BufferedReader(InputStreamReader(FileInputStream(file), charset))
+        BufferedReader(InputStreamReader(FileInputStream(file), charset)).use { reader ->
             while (true) {
                 val line = reader.readLine() ?: break
                 code(line)
             }
-        } finally {
-            FileUt.close(reader)
         }
     }
 
@@ -609,10 +522,10 @@ open class WithUtil {
 
     @Throws(TimeoutException::class, InterruptedException::class)
     fun sync(
-        count: Int = 1,
-        timeout: Long = DateUt.DAY,
-        timeunit: TimeUnit = TimeUnit.MILLISECONDS,
-        code: Fun10<Fun00>
+            count: Int = 1,
+            timeout: Long = DateUt.DAY,
+            timeunit: TimeUnit = TimeUnit.MILLISECONDS,
+            code: Fun10<Fun00>
     ) {
         val done = CountDownLatch(count)
         code { done.countDown() }
@@ -621,10 +534,10 @@ open class WithUtil {
 
     @Throws(TimeoutException::class, InterruptedException::class)
     fun <V> sync(
-        count: Int = 1,
-        timeout: Long = DateUt.DAY,
-        timeunit: TimeUnit = TimeUnit.MILLISECONDS,
-        code: Fun10<Fun10<V>>
+            count: Int = 1,
+            timeout: Long = DateUt.DAY,
+            timeunit: TimeUnit = TimeUnit.MILLISECONDS,
+            code: Fun10<Fun10<V>>
     ): V {
         val done = CountDownLatch(count)
         var ret: V? = null
@@ -644,10 +557,23 @@ open class WithoutUtil {
     }
 
     /**
+     * @return False if code() throws an exception, otherwise true.
+     * Example: let ok = Without.exceptionOrFalse { code }
+     */
+    fun exceptionOrFalse(code: Fun00): Boolean {
+        return try {
+            code()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
      * @return Result of the given block or null if there is an exception.
      * Example: let value = Without.exception(Int.parse(s)) ?: -1
      */
-    fun <T> exception(code: () -> T): T? {
+    fun <T> exceptionOrNull(code: () -> T): T? {
         return try {
             code()
         } catch (e: Exception) {
@@ -671,7 +597,7 @@ open class WithoutUtil {
      * @return Result of the given block or null if there is an exception.
      * Example: let value = Without.throwable(Int.parse(s)) ?: -1
      */
-    fun <T> throwable(code: () -> T): T? {
+    fun <T> throwableOrNull(code: () -> T): T? {
         return try {
             code()
         } catch (e: Throwable) {
@@ -693,9 +619,10 @@ open class WithoutUtil {
 
     fun comments(file: File, prefix: String = "#", code: (String) -> Unit) {
         With.lines(file) {
+            // TODO Skip space instead of trim().
             val s = it.trim()
             if (s.isNotEmpty() && !s.startsWith(prefix)) {
-                code(s)
+                code(it)
             }
         }
     }

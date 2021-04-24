@@ -17,7 +17,6 @@
 
 package com.cplusedition.bot.core
 
-import com.cplusedition.bot.core.TextUtil.Companion.TextUt
 import java.io.File
 import java.io.IOException
 import java.io.PrintStream
@@ -220,260 +219,14 @@ interface ICoreLogger : ILog {
  * In general, methods that retreive status, eg. errorCount, are synchronous.
  */
 open class CoreLogger(
-    final override val debugging: Boolean,
-    final override val startTime: Long = System.currentTimeMillis(),
-    final override val prefix: String = "####",
-    out: PrintStream = System.out,
-    err: PrintStream = System.err
+        final override val debugging: Boolean,
+        final override val startTime: Long = System.currentTimeMillis(),
+        final override val prefix: String = "####",
+        out: PrintStream = System.out,
+        err: PrintStream = System.err
 ) : ICoreLogger {
 
     ////////////////////////////////////////////////////////////////////////
-
-    interface ILifecycleListener {
-        fun onStart(msg: String, starttime: Long, logger: Fun10<String>)
-        fun onDone(msg: String, endtime: Long, errors: Int, logger: Fun10<String>)
-    }
-
-    ////////////////////////////////////////////////////////////////////////
-
-    private class Delegate(
-        private val debugging: Boolean,
-        private var startTime: Long,
-        private val prefix: String,
-        private val out: PrintStream,
-        private val err: PrintStream
-    ) {
-
-        private class Info(
-            val name: String?,
-            val errorCount: Int,
-            val startTime: Long
-        )
-
-        private val callStack = Stack<Info>()
-        private val quietStack = Stack<Boolean>()
-        private val logs = ArrayList<String>()
-        private val listeners = ArrayList<ILifecycleListener>()
-        private val executor = Executors.newSingleThreadExecutor()
-        private val prefixEnter = "$prefix +++++++"
-        private val prefixTimestamp = "$prefix        "
-
-        private var quiet = false
-        private var errorCount = 0
-
-        fun getErrorCount(): Int {
-            return executor.submit(Callable<Int> {
-                errorCount
-            }).get()
-        }
-
-        fun resetErrorCount(): Int {
-            return executor.submit(Callable<Int> {
-                val ret = errorCount
-                errorCount = 0
-                return@Callable ret
-            }).get()
-        }
-
-        fun flush() {
-            executor.submit {
-                flushall()
-            }.get()
-        }
-
-        fun log(msg: String, e: Throwable? = null, timestamp: Boolean, error: Boolean = false) {
-            val time = if (timestamp) System.currentTimeMillis() else null
-            executor.submit {
-                if (error) {
-                    ++errorCount
-                    flushall()
-                    log1(err, msg, e, time, null)
-                    err.flush()
-                } else {
-                    flushall()
-                    log1(out, msg, e, time, null)
-                    out.flush()
-                }
-            }
-        }
-
-        fun e() {
-            executor.submit {
-                ++errorCount
-            }
-        }
-
-        fun enter(name: String?, msg: String?) {
-            val time = System.currentTimeMillis()
-            executor.submit {
-                enter1(name, msg, time)
-            }
-        }
-
-        fun leave(msg: String?) {
-            val time = System.currentTimeMillis()
-            executor.submit {
-                leave1(msg, time)
-            }
-        }
-
-        @Throws(IllegalStateException::class)
-        fun leaveX(msg: String?) {
-            val time = System.currentTimeMillis()
-            try {
-                executor.submit {
-                    if (errorCount > 0) {
-                        val info = callStack.peek()
-                        leave1(msg, time)
-                        throw java.lang.IllegalStateException(info.name)
-                    } else {
-                        leave1(msg, time)
-                    }
-                }.get()
-            } catch (e: ExecutionException) {
-                throw e.cause ?: e
-            }
-        }
-
-        fun quiet(code: Fun00) {
-            executor.submit {
-                quietStack.push(quiet)
-                quiet = true
-            }
-            try {
-                code()
-            } finally {
-                executor.submit {
-                    quiet = quietStack.pop()
-                }
-            }
-        }
-
-        @Throws(IOException::class)
-        fun saveLog(file: File): Future<*> {
-            return executor.submit {
-                file.mkparentOrFail()
-                // Make sure there is a terminating line break.
-                if (logs.last().isNotEmpty()) {
-                    logs.add("")
-                }
-                file.writeText(logs.joinln())
-            }
-        }
-
-        fun getLog(): List<String> {
-            return executor.submit(Callable {
-                ArrayList(logs)
-            }).get()
-        }
-
-        @Throws
-        fun addLifecycleListener(listener: ILifecycleListener) {
-            executor.submit {
-                listeners.add(listener)
-            }
-        }
-
-        @Throws
-        fun removeLifecycleListener(listener: ILifecycleListener) {
-            executor.submit {
-                listeners.remove(listener)
-            }
-        }
-
-        ////////////////////////////////////////////////////////////////////////
-
-        private fun flushall() {
-            out.flush()
-            err.flush()
-        }
-
-        private fun log1(out: PrintStream, msg: String, e: Throwable? = null, start: Long?, end: Long?) {
-            if (quiet) {
-                return
-            }
-            val s = when {
-                start != null && end != null ->
-                    "$prefix ${IStepWatch.fmt((end - start) / 1000f)}/${IStepWatch.fmt((end - startTime) / 1000f)} s: $msg"
-                start != null ->
-                    "$prefixTimestamp${IStepWatch.fmt((start - startTime) / 1000f)} s: $msg"
-                end != null ->
-                    "$prefixEnter${IStepWatch.fmt((end - startTime) / 1000f)} s: $msg"
-                else -> msg
-            }
-            if (e == null) {
-                smartlog(out, s)
-            } else {
-                val w = StringPrintWriter()
-                if (s.endsWith(TextUt.LB)) {
-                    w.print(s)
-                } else if (s.isNotEmpty()) {
-                    w.println(s)
-                }
-                e.printStackTrace(w)
-                val str = w.toString()
-                out.print(str)
-                logs.add(str)
-            }
-        }
-
-        private fun smartlog(out: PrintStream, msg: String) {
-            if (msg.endsWith(TextUt.LB)) {
-                out.print(msg)
-                logs.add(msg)
-            } else if (!msg.isEmpty()) {
-                out.println(msg)
-                logs.add(msg)
-                logs.add(TextUt.LB)
-            }
-        }
-
-        private fun enter1(name: String?, msg: String?, time: Long) {
-            callStack.push(Info(name, errorCount, time))
-            if (debugging && callStack.size == 1) {
-                listeners.forEach {
-                    it.onStart(name ?: "", startTime) { s ->
-                        log1(out, s, null, null, time)
-                    }
-                }
-            }
-            errorCount = 0
-            if (debugging && name != null) {
-                val b = StringBuilder()
-                for (i in 0 until callStack.size) {
-                    b.append('+')
-                }
-                if (!b.isEmpty()) b.append(' ')
-                b.append(name)
-                if (msg != null) b.append(": $msg")
-                log1(out, b.toString(), null, null, time)
-            }
-        }
-
-        private fun leave1(msg: String?, time: Long) {
-            val info = callStack.pop()
-            errorCount += info.errorCount
-            if (debugging && info.name != null) {
-                val b = StringBuilder()
-                for (i in 0..callStack.size) {
-                    b.append('-')
-                }
-                if (!b.isEmpty()) b.append(' ')
-                b.append(info.name)
-                if (msg != null) b.append(": $msg")
-                log1(out, b.toString(), null, info.startTime, time)
-            }
-            if (callStack.isEmpty()) {
-                listeners.forEach {
-                    it.onDone(info.name ?: "", time, errorCount) { s ->
-                        log1(out, s, null, null, time)
-                    }
-                }
-            }
-        }
-    }
-
-////////////////////////////////////////////////////////////////////////
 
     private val delegate = Delegate(debugging, startTime, prefix, out, err)
 
@@ -481,7 +234,7 @@ open class CoreLogger(
     override val errorCount: Int
         get() = delegate.getErrorCount()
 
-////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////
 
     override fun resetErrorCount(): Int {
         return delegate.resetErrorCount()
@@ -556,7 +309,7 @@ open class CoreLogger(
         delegate.log(msg, null, true, false)
     }
 
-////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////
 
     override fun d(msgs: Iterator<String>) {
         if (debugging && msgs.hasNext()) {
@@ -582,7 +335,7 @@ open class CoreLogger(
         }
     }
 
-////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////
 
     override fun dfmt(format: String, vararg args: Any) {
         if (debugging) {
@@ -704,5 +457,251 @@ open class CoreLogger(
         delegate.leaveX(msg)
     }
 
-////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////
+
+    interface ILifecycleListener {
+        fun onStart(msg: String, starttime: Long, logger: Fun10<String>)
+        fun onDone(msg: String, endtime: Long, errors: Int, logger: Fun10<String>)
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+
+    private class Delegate(
+            private val debugging: Boolean,
+            private var startTime: Long,
+            private val prefix: String,
+            private val out: PrintStream,
+            private val err: PrintStream
+    ) {
+
+        private class Info(
+                val name: String?,
+                val errorCount: Int,
+                val startTime: Long
+        )
+
+        private val callStack = Stack<Info>()
+        private val quietStack = Stack<Boolean>()
+        private val logs = ArrayList<String>()
+        private val listeners = ArrayList<ILifecycleListener>()
+        private val executor = Executors.newSingleThreadExecutor()
+        private val prefixEnter = "$prefix +++++++"
+        private val prefixTimestamp = "$prefix        "
+
+        private var quiet = false
+        private var errorCount = 0
+
+        fun getErrorCount(): Int {
+            return executor.submit(Callable<Int> {
+                errorCount
+            }).get()
+        }
+
+        fun resetErrorCount(): Int {
+            return executor.submit(Callable<Int> {
+                val ret = errorCount
+                errorCount = 0
+                return@Callable ret
+            }).get()
+        }
+
+        fun flush() {
+            executor.submit {
+                flushall()
+            }.get()
+        }
+
+        fun log(msg: String, e: Throwable? = null, timestamp: Boolean, error: Boolean = false) {
+            val time = if (timestamp) System.currentTimeMillis() else null
+            executor.submit {
+                if (error) {
+                    ++errorCount
+                    flushall()
+                    log1(err, msg, e, time, null)
+                    err.flush()
+                } else {
+                    flushall()
+                    log1(out, msg, e, time, null)
+                    out.flush()
+                }
+            }
+        }
+
+        fun e() {
+            executor.submit {
+                ++errorCount
+            }
+        }
+
+        fun enter(name: String?, msg: String?) {
+            val time = System.currentTimeMillis()
+            executor.submit {
+                enter1(name, msg, time)
+            }
+        }
+
+        fun leave(msg: String?) {
+            val time = System.currentTimeMillis()
+            executor.submit {
+                leave1(msg, time)
+            }
+        }
+
+        @Throws(IllegalStateException::class)
+        fun leaveX(msg: String?) {
+            val time = System.currentTimeMillis()
+            try {
+                executor.submit {
+                    if (errorCount > 0) {
+                        val info = callStack.peek()
+                        leave1(msg, time)
+                        throw java.lang.IllegalStateException(info.name)
+                    } else {
+                        leave1(msg, time)
+                    }
+                }.get()
+            } catch (e: ExecutionException) {
+                throw e.cause ?: e
+            }
+        }
+
+        fun quiet(code: Fun00) {
+            executor.submit {
+                quietStack.push(quiet)
+                quiet = true
+            }
+            try {
+                code()
+            } finally {
+                executor.submit {
+                    quiet = quietStack.pop()
+                }
+            }
+        }
+
+        @Throws(IOException::class)
+        fun saveLog(file: File): Future<*> {
+            return executor.submit {
+                file.mkparentOrFail()
+                // Make sure there is a terminating line break.
+                if (logs.isNotEmpty() && !logs.last().endsWith(TextUt.LB)) {
+                    logs.add(TextUt.LB)
+                }
+                file.writeText(logs.join(""))
+            }
+        }
+
+        fun getLog(): List<String> {
+            return executor.submit(Callable {
+                ArrayList(logs)
+            }).get()
+        }
+
+        @Throws
+        fun addLifecycleListener(listener: ILifecycleListener) {
+            executor.submit {
+                listeners.add(listener)
+            }
+        }
+
+        @Throws
+        fun removeLifecycleListener(listener: ILifecycleListener) {
+            executor.submit {
+                listeners.remove(listener)
+            }
+        }
+
+        ////////////////////////////////////////////////////////////////////////
+
+        private fun flushall() {
+            out.flush()
+            err.flush()
+        }
+
+        private fun log1(out: PrintStream, msg: String, e: Throwable? = null, start: Long?, end: Long?) {
+            if (quiet) {
+                return
+            }
+            val s = when {
+                start != null && end != null ->
+                    "$prefix ${IStepWatch.fmt((end - start) / 1000f)}/${IStepWatch.fmt((end - startTime) / 1000f)} s: $msg"
+                start != null ->
+                    "$prefixTimestamp${IStepWatch.fmt((start - startTime) / 1000f)} s: $msg"
+                end != null ->
+                    "$prefixEnter${IStepWatch.fmt((end - startTime) / 1000f)} s: $msg"
+                else -> msg
+            }
+            if (e == null) {
+                smartlog(out, s)
+            } else {
+                val w = StringPrintWriter()
+                if (s.endsWith(TextUt.LB)) {
+                    w.print(s)
+                } else if (s.isNotEmpty()) {
+                    w.println(s)
+                }
+                e.printStackTrace(w)
+                val str = w.toString()
+                out.print(str)
+                logs.add(str)
+            }
+        }
+
+        private fun smartlog(out: PrintStream, msg: String) {
+            if (msg.endsWith(TextUt.LB)) {
+                out.print(msg)
+                logs.add(msg)
+            } else if (!msg.isEmpty()) {
+                out.println(msg)
+                logs.add(msg + TextUt.LB)
+            }
+        }
+
+        private fun enter1(name: String?, msg: String?, time: Long) {
+            callStack.push(Info(name, errorCount, time))
+            if (debugging && callStack.size == 1) {
+                listeners.forEach {
+                    it.onStart(name ?: "", startTime) { s ->
+                        log1(out, s, null, null, time)
+                    }
+                }
+            }
+            errorCount = 0
+            if (debugging && name != null) {
+                val b = StringBuilder()
+                for (i in 0 until callStack.size) {
+                    b.append('+')
+                }
+                if (!b.isEmpty()) b.append(' ')
+                b.append(name)
+                if (msg != null) b.append(": $msg")
+                log1(out, b.toString(), null, null, time)
+            }
+        }
+
+        private fun leave1(msg: String?, time: Long) {
+            val info = callStack.pop()
+            errorCount += info.errorCount
+            if (debugging && info.name != null) {
+                val b = StringBuilder()
+                for (i in 0..callStack.size) {
+                    b.append('-')
+                }
+                if (!b.isEmpty()) b.append(' ')
+                b.append(info.name)
+                if (msg != null) b.append(": $msg")
+                log1(out, b.toString(), null, info.startTime, time)
+            }
+            if (callStack.isEmpty()) {
+                listeners.forEach {
+                    it.onDone(info.name ?: "", time, errorCount) { s ->
+                        log1(out, s, null, null, time)
+                    }
+                }
+            }
+        }
+    }
+
+    ////////////////////////////////////////////////////////////////////////
+
 }

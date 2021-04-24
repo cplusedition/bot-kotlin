@@ -22,6 +22,8 @@ import java.io.InputStream
 import java.security.SecureRandom
 import java.util.*
 
+val RandomUt = RandomUtil.singleton
+
 open class RandomUtil(private val random: Random) {
 
     companion object {
@@ -31,7 +33,7 @@ open class RandomUtil(private val random: Random) {
                 return RandomUtil(SecureRandom())
             }
         }
-        val RandomUt = singletons.get()
+        val singleton: RandomUtil = singletons.get()!!
     }
 
     ////////////////////////////////////////////////////////////////////////
@@ -183,7 +185,7 @@ open class RandomUtil(private val random: Random) {
         get() = getASCII { it in 'a'..'z' || it in 'A'..'Z' }
 
     val letterOrDigit: Char
-        get () = getASCII { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' }
+        get() = getASCII { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' }
 
     fun getWord(min: Int, max: Int): String {
         return getString(min, max) { if (it == 0) letter else letterOrDigit }
@@ -263,7 +265,7 @@ open class RandomUtil(private val random: Random) {
     ////////////////////////////////////////////////////////////////////////
 
     open class RandomInputStream(
-        private val length: Int
+            private val length: Int
     ) : InputStream() {
 
         private val random = RandomUt

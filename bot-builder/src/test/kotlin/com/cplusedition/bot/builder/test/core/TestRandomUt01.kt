@@ -19,9 +19,10 @@ package com.cplusedition.bot.builder.test.core
 
 import com.cplusedition.bot.builder.test.zzz.TestBase
 import com.cplusedition.bot.core.Fun10
+import com.cplusedition.bot.core.RandomUt
 import com.cplusedition.bot.core.RandomUtil
-import com.cplusedition.bot.core.RandomUtil.Companion.RandomUt
-import com.cplusedition.bot.core.StructUtil.Companion.StructUt
+import com.cplusedition.bot.core.RandomUtil.RandomInputStream
+import com.cplusedition.bot.core.StructUt
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -399,7 +400,7 @@ class TestRandomUt01 : TestBase() {
     fun testRandomInputStream01() {
         subtest {
             val count = 1000
-            val input = RandomUtil.RandomInputStream(count)
+            val input = RandomInputStream(count)
             val set = mutableSetOf<Int>()
             for (i in 0 until count) {
                 val v = input.read()
@@ -412,7 +413,7 @@ class TestRandomUt01 : TestBase() {
         }
         subtest {
             val count = 1000
-            val input = RandomUtil.RandomInputStream(count)
+            val input = RandomInputStream(count)
             val a = ByteArray(500)
             assertEquals(200, input.read(a, 0, 200))
             assertEquals(300, input.read(a, 0, 300))

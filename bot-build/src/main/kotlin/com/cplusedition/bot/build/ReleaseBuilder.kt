@@ -24,15 +24,10 @@ import com.cplusedition.bot.build.BuilderBase.Workspace.botProject
 import com.cplusedition.bot.builder.BuilderUtil.Companion.BU
 import com.cplusedition.bot.builder.Checksum
 import com.cplusedition.bot.builder.Fileset
-import com.cplusedition.bot.builder.KotlinProject
+import com.cplusedition.bot.builder.VerifyChecksum
 import com.cplusedition.bot.builder.Zip
 import com.cplusedition.bot.core.*
 import com.cplusedition.bot.core.ChecksumUtil.ChecksumKind.SHA256
-import com.cplusedition.bot.core.DateUtil.Companion.DateUt
-import com.cplusedition.bot.core.FileUtil.Companion.FileUt
-import com.cplusedition.bot.core.ProcessUtil.Companion.ProcessUt
-import com.cplusedition.bot.core.StructUtil.Companion.StructUt
-import com.cplusedition.bot.core.WithUtil.Companion.With
 import org.junit.Ignore
 import org.junit.Test
 
@@ -42,9 +37,11 @@ class ReleaseBuilder : BuilderBase(true) {
     @Test
     fun distSrcZip() {
         log.enterX(this::distSrcZip) {
-            val zipfile = Dist.zipfile.mkparentOrFail()
+            val zipfile = builderRes("dist/${botProject.gav.artifactId}-${DateUt.today}-src.zip").mkparentOrFail()
             task(Zip(zipfile).withPrefix(*Dist.modules).add(Dist.top).preserveTimestamp(false))
             task(Checksum.single(SHA256, zipfile))
+            task(VerifyChecksum(zipfile.changeSuffix(".zip.sha256"), SHA256, zipfile.parentFile))
+            log.i("See output at ${zipfile.path}")
         }
     }
 
@@ -55,59 +52,32 @@ class ReleaseBuilder : BuilderBase(true) {
     @Test
     fun distSrcZipUsingZipCommand() {
         log.enterX(this::distSrcZipUsingZipCommand) {
-            val zipfile = Dist.zipfile.mkparentOrFail()
+            val zipfile = builderRes("dist/${botProject.gav.artifactId}-${DateUt.today}-src.zip").mkparentOrFail()
             zipfile.delete()
-            val cmdline = mutableListOf("zip", "-ry", zipfile.absolutePath)
-            val cmdsize = cmdline.size
+            val args = ArrayList<String>()
+            args.addAll("-ry", zipfile.absolutePath)
             for (fileset in Dist.modules) {
-                fileset.walk { _, rpath ->
-                    cmdline.add("${fileset.dir.name}${FileUt.SEPCHAR}$rpath")
-                }
+                args.addAll(fileset.collect(FilePathCollectors::pathOfFiles).map {
+                    "${fileset.dir.name}${FileUt.SEPCHAR}$it"
+                })
             }
-            Dist.top.walk { _, rpath ->
-                cmdline.add(rpath)
-            }
-            // log.d(cmdline)
-            log.d(ProcessUt.backtick(botProject.dir, cmdline))
-            log.d("# Zip ${zipfile.name}: ${cmdline.size - cmdsize} files, ${BU.filesizeString(zipfile)}")
+            args.addAll(Dist.top.collect(FilePathCollectors::pathOfFiles))
+            ProcessUt.backtick(System.out, botProject.dir, "zip", args)
+            log.d("# Zip ${zipfile.name}: ${args.size - 3} files, ${BU.filesizeString(zipfile)}")
             task(Checksum.single(SHA256, zipfile))
         }
     }
 
     @Ignore
     @Test
-    fun updateReleaseVersion() {
-        var count = 0
-        val versionPat = Regex("""(?m)^\s*version\s*'([\d.]+)'\s*$""")
-        val kotlinVersionPat = Regex("""(?m)^(\s*ext\.kotlin_version\s*=\s*)'([^']+)'""")
-        for (project in Workspace.projects) {
-            val buildgradle = project.dir.file("build.gradle")
-            if (!buildgradle.exists()) continue
-            val modified = With.rewriteText(buildgradle) {
-                it.replace(versionPat, "version '$VERSION'")
-                    .replace(kotlinVersionPat, "$1'$KOTLIN_VERSION'")
-            }
-            var msg = "# ${project.gav.artifactId}"
-            if (modified) {
-                ++count
-                msg += ": modified"
-            }
-            log.d(msg)
-        }
-        log.i("## Updated $count files")
-    }
-
-    @Ignore
-    @Test
     fun fixCopyrights() {
-        val copyright = Workspace.dir.existsOrFail("COPYRIGHT").readText()
-        val regex = Regex("(?si)\\s*/\\*.*?Cplusedition Limited.*?\\s+All rights reserved.*?\\*/\\s*")
-        for (project in Workspace.projects) {
-            if (project !is KotlinProject) continue
+        val copyright = Workspace.topdir.file("COPYRIGHT").existsOrFail().readText()
+        val regex = Regex("(?si)\\s*/\\*.*?Copyright.*?Cplusedition Limited.*?\\s+All rights reserved.*?\\*/\\s*")
+        for (project in arrayOf(botCoreProject, botBuilderProject, botBuildProject)) {
             log.i("### ${project.gav.artifactId}")
             val modified = ArrayList<String>()
             for (dir in StructUt.concat(project.mainSrcs, project.testSrcs)) {
-                dir.walker.files { file, rpath ->
+                dir.ut.files { file, rpath ->
                     if (!rpath.endsWith(".kt")) return@files
                     val text = file.readText()
                     if (text.startsWith(copyright)) return@files
@@ -122,24 +92,23 @@ class ReleaseBuilder : BuilderBase(true) {
     }
 
     object Dist {
-        val zipfile = botBuildProject.dir.file("dist/${botProject.gav.artifactId}-$VERSION-${DateUt.today}-src.zip")
         val srcs = arrayOf(
-            "src/main/kotlin/**/*.kt",
-            "src/test/kotlin/**/*.kt",
-            "build.gradle",
-            ".gitignore"
+                "src/main/kotlin/**/*.kt",
+                "src/test/kotlin/**/*.kt",
+                "build.gradle",
+                ".gitignore"
         )
         val modules = arrayOf(
-            Fileset(botBuildProject.dir).includes(*srcs),
-            Fileset(botCoreProject.dir).includes(*srcs),
-            Fileset(botBuilderProject.dir).includes(*srcs).includes("src/test/resources/**")
+                Fileset(botBuildProject.dir).includes(*srcs),
+                Fileset(botCoreProject.dir).includes(*srcs),
+                Fileset(botBuilderProject.dir).includes(*srcs).includes("src/test/resources/**")
         )
         val top = Fileset(botProject.dir).includes(*srcs).includes(
-            "settings.gradle",
-            "COPYRIGHT",
-            "LICENSE.txt",
-            "README.md",
-            "docs/**/*.md"
+                "settings.gradle",
+                "COPYRIGHT",
+                "LICENSE",
+                "README.md",
+                "docs/**/*.md"
         )
     }
 }

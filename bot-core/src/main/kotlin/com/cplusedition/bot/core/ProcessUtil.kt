@@ -17,20 +17,12 @@
 
 package com.cplusedition.bot.core
 
-import com.cplusedition.bot.core.DateUtil.Companion.DateUt
-import com.cplusedition.bot.core.FileUtil.Companion.FileUt
-import com.cplusedition.bot.core.TextUtil.Companion.TextUt
-import java.io.File
-import java.io.IOException
+import java.io.*
 import java.util.concurrent.*
 
+object ProcessUt : ProcessUtil()
+
 open class ProcessUtil {
-
-    companion object {
-        val ProcessUt = ProcessUtil()
-        private val pool = Executors.newCachedThreadPool()
-
-    }
 
     fun sleep(ms: Long) {
         try {
@@ -56,79 +48,179 @@ open class ProcessUtil {
         }
     }
 
-    fun async(task: Fun00): Future<*> {
-        return pool.submit(task)
+    @Throws(Exception::class)
+    fun backtick(cmd: String, args: List<String>): String {
+        return backtick(FileUt.pwd(), cmd, args)
     }
 
-    fun <V> async(task: Callable<V>): Future<V> {
-        return pool.submit(task)
+    @Throws(Exception::class)
+    fun backtick(workdir: File, cmd: String, args: List<String>): String {
+        return backtick(workdir, cmd, *args.toTypedArray())
     }
 
-    fun async(
-        vararg cmdline: String
-    ): Future<Process> {
-        return async(FileUt.pwd(), cmdline, DateUt.DAY, TimeUnit.MILLISECONDS) { it }
+    @Throws(Exception::class)
+    fun backtick(cmd: String, vararg args: String): String {
+        return backtick(FileUt.pwd(), cmd, *args)
     }
 
-    fun async(
-        workdir: File,
-        vararg cmdline: String
-    ): Future<Process> {
-        return async(workdir, cmdline, DateUt.DAY, TimeUnit.MILLISECONDS) { it }
+    @Throws(Exception::class)
+    fun backtick(workdir: File, cmd: String, vararg args: String): String {
+        val out = ByteArrayOutputStream()
+        val err = ByteArrayOutputStream()
+        return ProcessUtBuilder(workdir, cmd, *args)
+                .out(out)
+                .err(err)
+                .async { process ->
+                    val rc = process.exitValue()
+                    if (rc != 0) {
+                        val outs = out.toString("UTF-8")
+                        val errs = err.toString("UTF-8")
+                        throw IOException("# ERROR: rc=$rc\n$outs\n$errs")
+                    }
+                    out.toString("UTF-8")
+                }.get()
     }
 
-    fun async(
-        workdir: File,
-        cmdline: Array<out String>,
-        timeout: Long = DateUt.DAY,
-        timeunit: TimeUnit = TimeUnit.MILLISECONDS
-    ): Future<Process> {
-        return async(workdir, cmdline, null, timeout, timeunit) { it }
+    @Throws(Exception::class)
+    fun backtick(out: OutputStream, workdir: File, cmd: String, args: List<String>): Int {
+        return backtick(out, workdir, cmd, *args.toTypedArray())
     }
 
-    fun <V> async(
-        vararg cmdline: String,
-        callback: Fun11<Process, V>
-    ): Future<V> {
-        return async(FileUt.pwd(), cmdline, DateUt.DAY, TimeUnit.MILLISECONDS, callback)
+    @Throws(Exception::class)
+    fun backtick(out: OutputStream, workdir: File, cmd: String, vararg args: String): Int {
+        val err = ByteArrayOutputStream()
+        return ProcessUtBuilder(workdir, cmd, *args)
+                .out(out)
+                .err(err)
+                .async { process ->
+                    val rc = process.exitValue()
+                    if (rc != 0) {
+                        val errs = err.toString("UTF-8")
+                        throw IOException("# ERROR: rc=$rc\n$errs")
+                    }
+                    rc
+                }.get()
+    }
+}
+
+class ProcessUtBuilder(
+        private var workdir: File,
+        private val cmd: String,
+        private vararg val args: String
+) {
+    private var env: Array<out String>? = null
+    private var timeout = DateUt.DAY
+    private var timeunit = TimeUnit.MILLISECONDS
+    private var out: OutputStream? = null
+    private var err: OutputStream? = null
+    private var input: InputStream? = null
+
+    constructor(cmd: String, vararg args: String) : this(FileUt.pwd(), cmd, *args)
+
+    companion object {
+        private val pool = Executors.newCachedThreadPool()
     }
 
-    fun <V> async(
-        workdir: File,
-        vararg cmdline: String,
-        callback: Fun11<Process, V>
-    ): Future<V> {
-        return async(workdir, cmdline, DateUt.DAY, TimeUnit.MILLISECONDS, callback)
+    fun workdir(dir: File): ProcessUtBuilder {
+        this.workdir = dir
+        return this
     }
 
-    fun <V> async(
-        workdir: File,
-        cmdline: Array<out String>,
-        timeout: Long = DateUt.DAY,
-        timeunit: TimeUnit = TimeUnit.MILLISECONDS,
-        callback: Fun11<Process, V>
-    ): Future<V> {
-        return async(workdir, cmdline, null, timeout, timeunit, callback)
+    fun env(vararg env: String): ProcessUtBuilder {
+        this.env = env
+        return this
     }
 
-    /**
-     * @param callback(process): V Invoke when process is completed without error.
-     * @return Future<V> where V is return type of the callback.
-     */
-    fun <V> async(
-        workdir: File,
-        cmdline: Array<out String>,
-        env: Array<out String>?,
-        timeout: Long = DateUt.DAY,
-        timeunit: TimeUnit = TimeUnit.MILLISECONDS,
-        callback: Fun11<Process, V>
-    ): Future<V> {
+    fun timeout(value: Long, unit: TimeUnit = TimeUnit.MILLISECONDS): ProcessUtBuilder {
+        this.timeout = value
+        this.timeunit = unit
+        return this
+    }
+
+    fun out(out: OutputStream): ProcessUtBuilder {
+        this.out = out
+        return this
+    }
+
+    fun err(err: OutputStream): ProcessUtBuilder {
+        this.err = err
+        return this
+    }
+
+    fun input(input: InputStream): ProcessUtBuilder {
+        this.input = input
+        return this
+    }
+
+    private fun okOrFail(rc: Int, out: ByteArrayOutputStream, err: ByteArrayOutputStream) {
+        if (rc == 0) return
+        val w = StringPrintWriter()
+        w.println("# rc=$rc")
+        val outs = out.toByteArray().inputStream().reader().readText()
+        if (outs.isNotEmpty()) w.println(outs)
+        val errs = err.toByteArray().inputStream().reader().readText()
+        if (errs.isNotEmpty()) w.println(errs)
+        throw AssertionError(w.toString())
+    }
+
+    fun asyncOrFail(): Future<Unit> {
+        val out = ByteArrayOutputStream()
+        val err = ByteArrayOutputStream()
+        this.out = out
+        this.err = err
+        return async { process ->
+            okOrFail(process.exitValue(), out, err)
+        }
+    }
+
+    fun <V, O : OutputStream> asyncOrFail(out: O, callback: Fun11<O, V>): Future<V> {
+        this.out = out
+        return async { process ->
+            if (process.exitValue() != 0) throw AssertionError("${process.exitValue()}")
+            callback(out)
+        }
+    }
+
+    fun <V, O : OutputStream, E : OutputStream> asyncOrFail(out: O, err: E, callback: Fun21<O, E, V>): Future<V> {
+        this.out = out
+        this.err = err
+        return async { process ->
+            if (process.exitValue() != 0) throw AssertionError("${process.exitValue()}")
+            callback(out, err)
+        }
+    }
+
+    fun async(): Future<Int> {
+        return async { process ->
+            process.exitValue()
+        }
+    }
+
+    fun <V> async(callback: Fun11<Process, V>): Future<V> {
         return pool.submit(Callable {
+            val cmdline = arrayOf(cmd, *args)
             val process = Runtime.getRuntime().exec(cmdline, env, workdir)
             try {
+                val outmon = pool.submit {
+                    process.inputStream.use {
+                        FileUt.copyByteWise(out ?: NullOutputStream(), it)
+                    }
+                }
+                val errmon = pool.submit {
+                    process.errorStream.use {
+                        FileUt.copyByteWise(err ?: NullOutputStream(), it)
+                    }
+                }
+                this.input?.let { input ->
+                    process.outputStream.use {
+                        FileUt.copy(DEFAULT_BUFFER_SIZE, it, input)
+                    }
+                }
                 if (!process.waitFor(timeout, timeunit)) {
                     throw TimeoutException()
                 }
+                outmon.get(timeout, timeunit)
+                errmon.get(timeout, timeunit)
                 return@Callable callback(process)
             } catch (e: Throwable) {
                 try {
@@ -140,32 +232,16 @@ open class ProcessUtil {
             }
         })
     }
+}
 
-    @Throws(Exception::class)
-    fun backtick(cmdline: List<String>): String? {
-        return backtick(FileUt.pwd(), cmdline)
+class NullOutputStream : OutputStream() {
+    override fun write(b: Int) {
     }
 
-    @Throws(Exception::class)
-    fun backtick(workdir: File, cmdline: List<String>): String {
-        return backtick(workdir, *cmdline.toTypedArray())
+    override fun write(b: ByteArray) {
     }
 
-    @Throws(Exception::class)
-    fun backtick(vararg cmdline: String): String? {
-        return backtick(FileUt.pwd(), *cmdline)
-    }
-
-    @Throws(Exception::class)
-    fun backtick(workdir: File, vararg cmdline: String): String {
-        return async(workdir, cmdline) { process ->
-            val rc = process.exitValue()
-            if (rc != 0) {
-                val s = FileUt.asString(process.errorStream)
-                val err = if (s.isEmpty()) s else "\n$s"
-                throw IOException("# ERROR: rc=$rc$err")
-            }
-            return@async FileUt.asString(process.inputStream)
-        }.get()
+    override fun write(b: ByteArray, off: Int, len: Int) {
     }
 }
+

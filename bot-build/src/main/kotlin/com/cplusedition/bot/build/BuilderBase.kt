@@ -18,41 +18,78 @@
 package com.cplusedition.bot.build
 
 import com.cplusedition.bot.builder.*
-import com.cplusedition.bot.core.FileUtil.Companion.FileUt
+import com.cplusedition.bot.core.FileUt
 import com.cplusedition.bot.core.MavenUtil.GAV
 import com.cplusedition.bot.core.file
 import org.junit.After
 import org.junit.Before
+import org.junit.ClassRule
+import org.junit.rules.TestRule
+import org.junit.runner.Description
+import org.junit.runners.model.Statement
+import java.io.File
 
-open class BuilderBase(debugging: Boolean) : BasicBuilder(Conf(debugging)) {
+open class BuilderBase(conf: IBuilderConf) : BasicBuilder(conf) {
+
+    constructor(project: IProject, debugging: Boolean) : this(BasicBuilderConf(
+            project,
+            Workspace.botBuildProject,
+            debugging,
+            Workspace))
+
+    constructor (debugging: Boolean) : this(Conf(debugging))
 
     companion object {
         const val GROUP = "com.cplusedition.bot"
-        const val VERSION = "1.2"
-        const val KOTLIN_VERSION = "1.3.21"
+        const val VERSION = "1.3.71"
+
+        object SingleTestChecker : TestRule {
+            override fun apply(base: Statement, description: Description): Statement {
+                if (description.testCount() > 1) {
+                    return object : Statement() {
+                        override fun evaluate() {
+                            System.err.println("!!! Please run a single test at a time !!!")
+                            System.exit(1)
+                        }
+                    }
+                }
+                return base
+            }
+        }
+
+        /// For JUnit tests, this avoid having to add @Ignore to every test.
+        @ClassRule
+        @JvmStatic
+        public fun singleTestChecker(): TestRule {
+            return SingleTestChecker
+        }
     }
 
     class Conf(debugging: Boolean) : BasicBuilderConf(
-        Workspace.botBuildProject,
-        Workspace.botBuildProject,
-        debugging,
-        Workspace
+            Workspace.botBuildProject,
+            Workspace.botBuildProject,
+            debugging,
+            Workspace
     )
 
     object Workspace : BasicWorkspace() {
-        val dir = FileUt.pwd("..")
-        val botProject = BasicProject(GAV.of("$GROUP:${dir.name}:$VERSION"), dir)
-        val botCoreProject = KotlinProject(GAV.of("$GROUP:bot-core:$VERSION"), dir.file("bot-core"))
-        val botBuilderProject = KotlinProject(GAV.of("$GROUP:bot-builder:$VERSION"), dir.file("bot-builder"))
-        val botBuildProject = KotlinProject(GAV.of("$GROUP:bot-build:$VERSION"), dir.file("bot-build"))
+        /// The system property override allow configuring the workspace without assumption on the current work directory.
+        /// This is also useful for launching this builder from another project.
+        val topdir = System.getProperty("BOT_KOTLIN_DIR")?.let { File(it) } ?: FileUt.pwd("..")
+        val botProject = BasicProject(GAV.of("$GROUP:${topdir.name}:$VERSION"), topdir)
+        val botCoreProject = KotlinProject(GAV.of("$GROUP:bot-core:$VERSION"), topdir.file("bot-core"))
+        val botBuilderProject = KotlinProject(GAV.of("$GROUP:bot-builder:$VERSION"), topdir.file("bot-builder"))
+        val botBuildProject = KotlinProject(GAV.of("$GROUP:bot-build:$VERSION"), topdir.file("bot-build"))
     }
 
     @Before
     fun setup() {
+        log.enter()
     }
 
     @After
     fun teardown() {
+        log.leaveX()
         log.flush()
     }
 }

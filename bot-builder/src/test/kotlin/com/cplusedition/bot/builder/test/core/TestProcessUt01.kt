@@ -18,16 +18,13 @@
 package com.cplusedition.bot.builder.test.core
 
 import com.cplusedition.bot.builder.test.zzz.TestBase
-import com.cplusedition.bot.core.DateUtil.Companion.DateUt
-import com.cplusedition.bot.core.FileUtil.Companion.FileUt
-import com.cplusedition.bot.core.ProcessUtil.Companion.ProcessUt
+import com.cplusedition.bot.core.*
 import com.cplusedition.bot.core.WithUtil.Companion.With
 import com.cplusedition.bot.core.WithoutUtil.Companion.Without
-import com.cplusedition.bot.core.file
 import org.junit.Assert.*
 import org.junit.Test
+import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
 
@@ -61,16 +58,17 @@ class TestProcessUt01 : TestBase() {
     fun testAsync01() {
         val files = testResDir.file("files")
         subtest {
-            ProcessUt.async("ls", "-1", files.absolutePath) {
-                val lines = FileUt.asStringList(it.inputStream)
+            ProcessUtBuilder("ls", "-1", files.absolutePath).asyncOrFail(ByteArrayOutputStream()) { out ->
+                val lines = out.toByteArray().inputStream().reader().readLines()
                 log.d(lines)
                 assertTrue(lines.contains("dir1"))
                 assertTrue(lines.contains("empty.dir"))
             }.get()
         }
         subtest {
-            ProcessUt.async(files, "ls", "-1") {
-                val lines = FileUt.asStringList(it.inputStream)
+            val out = ByteArrayOutputStream()
+            ProcessUtBuilder(files, "ls", "-1").out(out).async {
+                val lines = out.toByteArray().inputStream().reader().readLines()
                 log.d(lines)
                 assertTrue(lines.contains("dir1"))
                 assertTrue(lines.contains("empty.dir"))
@@ -78,8 +76,8 @@ class TestProcessUt01 : TestBase() {
         }
         subtest {
             Without.throwableOrFail {
-                ProcessUt.async(files, "ls", "-1") {
-                    val lines = FileUt.asStringList(it.inputStream)
+                ProcessUtBuilder(files, "ls", "-1").asyncOrFail(ByteArrayOutputStream()) { out ->
+                    val lines = out.toByteArray().inputStream().reader().readLines()
                     log.d(lines)
                     assertTrue(lines.contains("dir2"))
                     assertTrue(lines.contains("empty.dir"))
@@ -87,13 +85,13 @@ class TestProcessUt01 : TestBase() {
             }
         }
         subtest {
-            assertEquals("OK", ProcessUt.async("ls", "-1") {
+            assertEquals("OK", ProcessUtBuilder("ls", "-1").async {
                 "OK"
             }.get())
             /// Check that callback is not called on error.
             var ok = true
-            assertTrue(With.exception {
-                ProcessUt.async("/notexists") {
+            assertTrue(With.exceptionOrNull {
+                ProcessUtBuilder("/notexists").async {
                     ok = false
                     "OK"
                 }.get()
@@ -101,17 +99,17 @@ class TestProcessUt01 : TestBase() {
             assertTrue(ok)
         }
         subtest {
-            assertEquals("OK", ProcessUt.async(Callable { "OK" }).get())
-            assertTrue(With.exception {
-                ProcessUt.async(Callable { throw IOException() }).get()
+            assertEquals("OK", ProcessUtBuilder("true").async { "OK" }.get())
+            assertTrue(With.exceptionOrNull {
+                ProcessUtBuilder("true").async { throw IOException() }.get()
             } is ExecutionException)
         }
     }
 
     @Test
     fun testAsyncError01() {
-        val e = With.exception {
-            ProcessUt.async("notexists") { _ ->
+        val e = With.exceptionOrNull {
+            ProcessUtBuilder("notexists").async {
                 throw AssertionError()
             }.get()
         }
@@ -127,83 +125,67 @@ class TestProcessUt01 : TestBase() {
     fun testAsync02() {
         val files = testResDir.file("files")
         // Check default parameters.
-        ProcessUt.async(
-            FileUt.root(),
-            arrayOf("ls", "-1", files.absolutePath),
-            env = null
-        ) {
-            val lines = FileUt.asStringList(it.inputStream)
+        ProcessUtBuilder(
+                FileUt.root(),
+                "ls", "-1", files.absolutePath
+        ).asyncOrFail(ByteArrayOutputStream()) { out ->
+            val lines = out.toByteArray().inputStream().reader().readLines()
             log.d(lines)
             assertTrue(lines.contains("dir1"))
         }.get()
-        ProcessUt.async(
-            FileUt.root(),
-            arrayOf("ls", "-1", files.absolutePath),
-            env = null,
-            timeout = DateUt.HOUR
-        ) {
-            val lines = FileUt.asStringList(it.inputStream)
+        ProcessUtBuilder(
+                FileUt.root(),
+                "ls", "-1", files.absolutePath
+        ).timeout(1, TimeUnit.HOURS).asyncOrFail(ByteArrayOutputStream()) { out ->
+            val lines = out.toByteArray().inputStream().reader().readLines()
             log.d(lines)
             assertTrue(lines.contains("dir2"))
         }.get()
-        ProcessUt.async(
-            files,
-            arrayOf("ls", "-1"),
-            env = null,
-            timeunit = TimeUnit.SECONDS
-        ) {
-            val lines = FileUt.asStringList(it.inputStream)
+        ProcessUtBuilder(
+                files,
+                "ls", "-1"
+        ).timeout(10, TimeUnit.SECONDS).asyncOrFail(ByteArrayOutputStream()) { out ->
+            val lines = out.toByteArray().inputStream().reader().readLines()
             log.d(lines)
             assertTrue(lines.contains("empty.dir"))
         }.get()
-        ProcessUt.async(
-            FileUt.root(),
-            arrayOf("ls", "-1", files.absolutePath),
-            env = null,
-            timeout = 10,
-            timeunit = TimeUnit.SECONDS
-        ) {
-            val lines = FileUt.asStringList(it.inputStream)
+        ProcessUtBuilder(
+                FileUt.root(),
+                "ls", "-1", files.absolutePath
+        ).timeout(10000, TimeUnit.MILLISECONDS).asyncOrFail(ByteArrayOutputStream()) { out ->
+            val lines = out.toByteArray().inputStream().reader().readLines()
             log.d(lines)
             assertTrue(lines.contains("dir1"))
         }.get()
-        ProcessUt.async(
-            FileUt.root(),
-            arrayOf("ls", "-1", files.absolutePath),
-            env = arrayOf()
-        ) {
-            val lines = FileUt.asStringList(it.inputStream)
+        ProcessUtBuilder(
+                FileUt.root(),
+                "ls", "-1", files.absolutePath
+        ).env().asyncOrFail(ByteArrayOutputStream()) { out ->
+            val lines = out.toByteArray().inputStream().reader().readLines()
             log.d(lines)
             assertTrue(lines.contains("dir2"))
         }.get()
-        ProcessUt.async(
-            FileUt.root(),
-            arrayOf("ls", "-1", files.absolutePath),
-            env = arrayOf(),
-            timeout = DateUt.HOUR
-        ) {
-            val lines = FileUt.asStringList(it.inputStream)
+        ProcessUtBuilder(
+                FileUt.root(),
+                "ls", "-1", files.absolutePath
+        ).timeout(10000).env().asyncOrFail(ByteArrayOutputStream()) { out ->
+            val lines = out.toByteArray().inputStream().reader().readLines()
             log.d(lines)
             assertTrue(lines.contains("dir1"))
         }.get()
-        ProcessUt.async(
-            FileUt.root(),
-            arrayOf("ls", "-1", files.absolutePath),
-            env = arrayOf(),
-            timeunit = TimeUnit.SECONDS
-        ) {
-            val lines = FileUt.asStringList(it.inputStream)
+        ProcessUtBuilder(
+                FileUt.root(),
+                "ls", "-1", files.absolutePath
+        ).env().timeout(1, TimeUnit.MINUTES).asyncOrFail(ByteArrayOutputStream()) { out ->
+            val lines = out.toByteArray().inputStream().reader().readLines()
             log.d(lines)
             assertTrue(lines.contains("dir2"))
         }.get()
-        ProcessUt.async(
-            FileUt.root(),
-            arrayOf("ls", "-1", files.absolutePath),
-            env = arrayOf(),
-            timeout = 10,
-            timeunit = TimeUnit.SECONDS
-        ) {
-            val lines = FileUt.asStringList(it.inputStream)
+        ProcessUtBuilder(
+                FileUt.root(),
+                "ls", "-1", files.absolutePath
+        ).env("DEBUG=true").asyncOrFail(ByteArrayOutputStream()) { out ->
+            val lines = out.toByteArray().inputStream().reader().readLines()
             log.d(lines)
             assertTrue(lines.contains("empty.dir"))
         }.get()
@@ -211,8 +193,8 @@ class TestProcessUt01 : TestBase() {
 
     @Test
     fun testAsyncError02() {
-        val e = With.exception {
-            ProcessUt.async("notexists").get()
+        val e = With.exceptionOrNull {
+            ProcessUtBuilder("notexists").asyncOrFail().get()
         }
         val msg = e.toString()
         log.d(msg)
@@ -225,8 +207,9 @@ class TestProcessUt01 : TestBase() {
     @Test
     fun testAsyncTimeout01() {
         subtest {
-            val e = With.exception {
-                ProcessUt.async(FileUt.pwd(), arrayOf("sleep", "2"), 100, TimeUnit.MICROSECONDS).get()
+            val e = With.exceptionOrNull {
+                ProcessUtBuilder(FileUt.pwd(), "sleep", "2")
+                        .timeout(100, TimeUnit.MICROSECONDS).asyncOrFail().get()
             }
             val msg = e.toString()
             log.d(msg)
@@ -234,8 +217,9 @@ class TestProcessUt01 : TestBase() {
             assertTrue(msg.contains("java.util.concurrent.TimeoutException"))
         }
         subtest {
-            val e = With.exception {
-                ProcessUt.async(FileUt.pwd(), arrayOf("sleep", "2"), 100, TimeUnit.MICROSECONDS).get()
+            val e = With.exceptionOrNull {
+                ProcessUtBuilder(FileUt.pwd(), "sleep", "2")
+                        .timeout(100, TimeUnit.MICROSECONDS).asyncOrFail().get()
             }
             val msg = e.toString()
             log.d(msg)
@@ -244,56 +228,51 @@ class TestProcessUt01 : TestBase() {
         }
         // Check the other shortcut methods for coverage.
         subtest {
-            assertTrue(With.exception {
-                ProcessUt.async(
-                    FileUt.root(),
-                    arrayOf("sleep", "2"),
-                    100,
-                    TimeUnit.MICROSECONDS
-                ).get()
-            }.toString().contains("java.util.concurrent.TimeoutException"))
-        }
-        subtest {
-            assertTrue(With.exception {
-                ProcessUt.async(
-                    FileUt.root(),
-                    arrayOf("sleep", "2"),
-                    null,
-                    100,
-                    TimeUnit.MICROSECONDS
-                ) {}.get()
-            }.toString().contains("java.util.concurrent.TimeoutException"))
-        }
-        subtest {
-            assertTrue(With.exception {
-                ProcessUt.async(
-                    FileUt.root(),
-                    arrayOf("sleep", "2"),
-                    100,
-                    TimeUnit.MICROSECONDS
-                ).get()
-            }.toString().contains("java.util.concurrent.TimeoutException"))
-        }
-        subtest {
-            assertTrue(With.exception {
-                ProcessUt.async(
-                    FileUt.root(),
-                    arrayOf("sleep", "2"),
-                    null,
-                    100,
-                    TimeUnit.MICROSECONDS
-                ) { }.get()
+            assertTrue(With.exceptionOrNull {
+                ProcessUtBuilder(FileUt.root(), "sleep", "2")
+                        .timeout(100, TimeUnit.MICROSECONDS).asyncOrFail().get()
             }.toString().contains("java.util.concurrent.TimeoutException"))
         }
     }
 
     @Test
     fun testAsyncError03() {
-        assertTrue(With.exception {
-            ProcessUt.async {
-                throw AssertionError()
-            }.get()
-        } is ExecutionException)
+        subtest {
+            assertTrue(With.exceptionOrNull {
+                ProcessUtBuilder("true").async {
+                    throw AssertionError()
+                }.get()
+            } is ExecutionException)
+        }
+        subtest {
+            try {
+                val rc = ProcessUtBuilder("false").async().get()
+                assertEquals(1, rc)
+            } catch (e: Throwable) {
+                fail()
+            }
+        }
+        subtest {
+            try {
+                ProcessUtBuilder("false").asyncOrFail().get()
+            } catch (e: Throwable) {
+                val msg = "$e"
+                log.d(msg)
+                assertTrue(msg.contains("rc=1"))
+                assertTrue(msg.contains("AssertionError"))
+            }
+        }
+        subtest {
+            try {
+                ProcessUtBuilder("notexists").asyncOrFail().get()
+            } catch (e: Throwable) {
+                val msg = "$e"
+                log.d(msg)
+                assertTrue(msg.contains("No such file"))
+                assertTrue(msg.contains("notexists"))
+            }
+        }
+
     }
 
     @Test
@@ -301,20 +280,43 @@ class TestProcessUt01 : TestBase() {
         subtest {
             val files = testResDir.file("files")
             val ret = ProcessUt.backtick("ls", "-1", files.absolutePath)
-            if (ret == null) fail()
-            else {
-                log.d(ret)
-                assertTrue(Regex("(?m)^empty\\.dir$").find(ret) != null)
-            }
+            log.d(ret)
+            assertTrue(Regex("(?m)^empty\\.dir$").find(ret) != null)
         }
         subtest {
             val files = testResDir.file("files")
-            val ret = ProcessUt.backtick(listOf("ls", "-1", files.absolutePath))
-            if (ret == null) fail()
-            else {
-                log.d(ret)
-                assertTrue(Regex("(?m)^empty\\.dir$").find(ret) != null)
+            val ret = ProcessUt.backtick("ls", listOf("-1", files.absolutePath))
+            log.d(ret)
+            assertTrue(Regex("(?m)^empty\\.dir$").find(ret) != null)
+        }
+        subtest {
+            val data = RandomUt.getWords(100 * 1000, 0, 40).joinln()
+            val output = ByteArrayOutputStream()
+            output.use { out ->
+                data.byteInputStream().use { input ->
+                    val ret = ProcessUtBuilder("cat").input(input).out(out).async().get()
+                    assertEquals(0, ret)
+                }
             }
+            log.d("# output.size()=${output.size()}")
+            assertEquals(data, output.toString())
+        }
+        subtest {
+            val file = testResDir.file("html/manual.html")
+            val output = ByteArrayOutputStream()
+            output.use { out ->
+                val ret = ProcessUt.backtick(out, FileUt.pwd(), "cat", file.absolutePath)
+                assertEquals(0, ret)
+            }
+            log.d("# output.size()=${output.size()}")
+            assertEquals(file.readText(), output.toString())
+        }
+        subtest {
+            val ret = ProcessUt.backtick("find", listOf("/usr/lib/"))
+            val lines = ret.lines().size
+            log.d("# ret.lines=${lines}, ret.length=${ret.length}")
+            assertTrue("$lines", lines > 10 * 1000)
+            assertTrue("${ret.length}", ret.length > 1000 * 1000)
         }
     }
 }

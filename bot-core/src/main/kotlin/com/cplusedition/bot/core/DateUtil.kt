@@ -17,14 +17,11 @@
 
 package com.cplusedition.bot.core
 
-import com.cplusedition.bot.core.TextUtil.Companion.TextUt
 import java.util.*
 
-open class DateUtil {
+object DateUt : DateUtil()
 
-    companion object {
-        val DateUt = DateUtil()
-    }
+open class DateUtil {
 
     val SECOND: Long = 1000
     val MINUTE = 60 * SECOND
@@ -40,6 +37,13 @@ open class DateUtil {
      * @return The simple datetime string in form YYYYMMDD-hhmmss.
      */
     val now get() = datetimeString(Date())
+
+    /**
+     * Format with today string as %s.
+     */
+    fun today(format: String): String {
+        return TextUt.format(format, today)
+    }
 
     /**
      * @return Simple date string in form YYYYMMDD.

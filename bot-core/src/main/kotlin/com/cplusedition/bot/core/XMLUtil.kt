@@ -23,11 +23,9 @@ import java.io.File
 import javax.xml.parsers.DocumentBuilder
 import javax.xml.parsers.DocumentBuilderFactory
 
-open class XMLUtil {
+object XMLUt : XMLUtil()
 
-    companion object {
-        val XMLUt = XMLUtil()
-    }
+open class XMLUtil {
 
     fun getDocumentBuilder(): DocumentBuilder {
         return getDocumentBuilder(false, false)

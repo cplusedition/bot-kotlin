@@ -19,13 +19,16 @@ package com.cplusedition.bot.builder.test.builder
 
 import com.cplusedition.bot.builder.*
 import com.cplusedition.bot.builder.test.zzz.TestBase
+import com.cplusedition.bot.core.FileUt
 import com.cplusedition.bot.core.ICoreLogger
 import com.cplusedition.bot.core.MavenUtil.GAV
 import com.cplusedition.bot.core.WithUtil.Companion.With
+import com.cplusedition.bot.core.WithoutUtil.Companion.Without
 import com.cplusedition.bot.core.file
 import com.cplusedition.bot.core.join
 import org.junit.Assert.*
 import org.junit.Test
+import java.io.File
 
 class TestBuilder01 : TestBase() {
 
@@ -79,12 +82,12 @@ class TestBuilder01 : TestBase() {
                 val builderProject = KotlinProject(GAV.of("com.cplusedition.bot:bot-builder:1"), builderRes())
             }
             val builder = BasicBuilder(
-                BasicBuilderConf(
-                    BasicProject(GAV.of("a/a/1.0")),
-                    BasicProject(GAV.of("b/b/1.0")),
-                    debugging = false,
-                    workspace = basicworkspace
-                )
+                    BasicBuilderConf(
+                            BasicProject(GAV.of("a/a/1.0")),
+                            BasicProject(GAV.of("b/b/1.0")),
+                            debugging = false,
+                            workspace = basicworkspace
+                    )
             )
             assertEquals(1, builder.conf.workspace.projects.size)
 
@@ -106,13 +109,13 @@ class TestBuilder01 : TestBase() {
         }
         subtest {
             with(
-                BasicBuilder(
-                    BasicBuilderConf(
-                        BasicProject(GAV.of("a/a/1.0")),
-                        BasicProject(GAV.of("b/b/2.0")),
-                        debugging = false
+                    BasicBuilder(
+                            BasicBuilderConf(
+                                    BasicProject(GAV.of("a/a/1.0")),
+                                    BasicProject(GAV.of("b/b/2.0")),
+                                    debugging = false
+                            )
                     )
-                )
             ) {
                 log.enter("test1") {
                     log.d("# debug")
@@ -125,13 +128,13 @@ class TestBuilder01 : TestBase() {
         }
         subtest {
             with(
-                BasicBuilder(
-                    BasicBuilderConf(
-                        BasicProject(GAV.of("a/a/1.0")),
-                        BasicProject(GAV.of("b/b/1.0")),
-                        debugging = true
+                    BasicBuilder(
+                            BasicBuilderConf(
+                                    BasicProject(GAV.of("a/a/1.0")),
+                                    BasicProject(GAV.of("b/b/1.0")),
+                                    debugging = true
+                            )
                     )
-                )
             ) {
                 log.enter("test1") {
                     log.d("# debug")
@@ -173,10 +176,23 @@ class TestBuilder01 : TestBase() {
     }
 
     @Test
+    fun testBasicProject01() {
+        subtest("Check that BasicProject check project directory exists") {
+            Without.exceptionOrFail {
+                assertEquals("exists", BasicProject(GAV.of("group:exists:1.0"), FileUt.pwd()).gav.artifactId)
+                assertEquals("exists-default", BasicProject(GAV.of("group:exists-default:1.0")).gav.artifactId)
+            }
+            With.exceptionOrFail {
+                assertEquals("notexists", BasicProject(GAV.of("group:not-exists:1.0"), File("/notexists.dir")).gav.artifactId)
+            }
+        }
+    }
+
+    @Test
     fun testBasicWorkspace01() {
         val workspace = object : BasicWorkspace() {
             val coreProject =
-                KotlinProject(GAV.of("com.cplusedition.bot:bot-core:1"), builderAncestorSiblingTree("bot-core"))
+                    KotlinProject(GAV.of("com.cplusedition.bot:bot-core:1"), builderAncestorSiblingTree("bot-core"))
             val builderProject = KotlinProject(GAV.of("com.cplusedition.bot:bot-builder:1"), builderRes())
         }
         subtest {
@@ -190,9 +206,9 @@ class TestBuilder01 : TestBase() {
             assertTrue(project.srcDir.exists())
             assertTrue(project.mainSrcs.size == 2)
             assertTrue(project.testSrcs.size == 2)
-            assertTrue(project.mainRes.size == 1)
-            assertTrue(project.testRes.size == 1)
-            assertTrue(project.testRes[0].exists())
+            //            assertTrue(project.mainRes.size == 1)
+            //            assertTrue(project.testRes.size == 1)
+            assertTrue(project.testResDir.exists())
         }
     }
 

@@ -17,6 +17,8 @@
 
 package com.cplusedition.bot.core
 
+import com.cplusedition.bot.core.WithUtil.Companion.With
+import com.cplusedition.bot.core.WithoutUtil.Companion.Without
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
@@ -25,13 +27,13 @@ import java.util.*
 open class ChecksumUtil {
 
     class SumAndPath(
-        val sum: String,
-        val path: String // Empty string if no path is missing.
+            val sum: String,
+            val path: String // Empty string if no path is missing.
     )
 
     class ExpectedAndActual(
-        val expected: String,
-        val actual: String
+            val expected: String,
+            val actual: String
     ) {
         fun match(): Boolean {
             return actual == expected
@@ -59,9 +61,28 @@ open class ChecksumUtil {
                 }
             }
 
+            /** @param hexlen Length of hex encoded checksum. */
+            fun get(hexlen: Int): ChecksumKind? {
+                return when (hexlen) {
+                    32 -> MD5
+                    40 -> SHA1
+                    64 -> SHA256
+                    128 -> SHA512
+                    else -> null
+                }
+            }
+
             @Throws(IOException::class)
             fun readChecksum1(line: String, kind: ChecksumKind? = null): SumAndPath? {
                 return FormatA.match(line, kind) ?: FormatB.match(line) ?: FormatC.match(line) ?: FormatD.match(line)
+            }
+
+            /** Like readChecksum() but allow sum only input. */
+            @Throws(IOException::class)
+            fun readChecksum0(line: String, kind: ChecksumKind? = null): SumAndPath {
+                return FormatE.match(line) ?: FormatA.match(line, kind) ?: FormatB.match(line) ?: FormatC.match(line)
+                ?: FormatD.match(line)
+                ?: throw IOException("Invalid checksum line: $line")
             }
         }
 
@@ -77,15 +98,16 @@ open class ChecksumUtil {
                 local[this] = digester
                 return digester
             }
+            digester.reset()
             return digester
         }
 
         object FormatA {
-            private val format = Regex("(?s)^(\\w+)\\s*\\((.*)\\)\\s*= (\\S.*)$") // kind(path) = sum
+            private val format = Regex("(?s)^\\s*(\\w+)\\s*\\((.*)\\)\\s*= (\\S.*?)\\s*$") // kind(path) = sum
             fun match(line: String, kind: ChecksumKind?): SumAndPath? {
                 val m = format.matchEntire(line) ?: return null
                 val sumkind = m.groupValues[1].toUpperCase()
-                if (kind != null && kind != ChecksumKind.get(sumkind)) {
+                if (kind != null && kind != get(sumkind)) {
                     throw IOException("Checksum kind mismatch: expected=kind, actual=$sumkind")
                 }
                 return SumAndPath(m.groupValues[3], m.groupValues[2])
@@ -93,7 +115,7 @@ open class ChecksumUtil {
         }
 
         object FormatB {
-            private val format = Regex("(?s)^\\(?(.*?)\\)?\\s*=\\s+(\\S.*)$") // (path) = sum
+            private val format = Regex("(?s)^\\s*\\(?(.*?)\\)?\\s*=\\s+(\\S.*?)\\s*$") // (path) = sum
             fun match(line: String): SumAndPath? {
                 val m = format.matchEntire(line) ?: return null
                 return SumAndPath(m.groupValues[2], m.groupValues[1])
@@ -101,7 +123,7 @@ open class ChecksumUtil {
         }
 
         object FormatC {
-            private val format = Regex("(?s)^([0-9A-Fa-f]+)(?:\\s\\*|\\*\\s|\\s\\s)(.*)$") // sum  path
+            private val format = Regex("(?s)^\\s*([0-9A-Fa-f]+)(?:\\s\\*|\\*\\s|\\s\\s)(.*?)\\s*$") // sum  path
             fun match(line: String): SumAndPath? {
                 val m = format.matchEntire(line) ?: return null
                 return SumAndPath(m.groupValues[1], m.groupValues[2])
@@ -109,10 +131,18 @@ open class ChecksumUtil {
         }
 
         object FormatD {
-            private val format = Regex("(?s)^([0-9A-Fa-f]+)(?:\\s+(\\S.*))?$") // sum path?
+            private val format = Regex("(?s)^\\s*([0-9A-Fa-f]+)(?:\\s+(\\S.*?))?\\s*$") // sum path?
             fun match(line: String): SumAndPath? {
                 val m = format.matchEntire(line) ?: return null
                 return SumAndPath(m.groupValues[1], m.groupValues[2])
+            }
+        }
+
+        object FormatE {
+            private val format = Regex("(?s)^\\s*([0-9A-Fa-f]+)\\s*$") // sum
+            fun match(line: String): SumAndPath? {
+                val m = format.matchEntire(line) ?: return null
+                return SumAndPath(m.groupValues[1], "")
             }
         }
 
@@ -138,7 +168,13 @@ open class ChecksumUtil {
 
         @Throws(IOException::class)
         fun digest(datafile: File): String {
-            return Hex.encode(this.getDigester().digest(datafile.readBytes())).toString()
+            val digister = this.getDigester()
+            With.bytes(datafile, 256 * 1024) { b, n ->
+                if (n > 0) {
+                    digister.update(b, 0, n)
+                }
+            }
+            return Hex.encode(digister.digest()).toString()
         }
 
         @Throws(IOException::class)
@@ -146,5 +182,28 @@ open class ChecksumUtil {
             return expected.toLowerCase() == digest(datafile)
         }
 
+        /** Like read() but allow sum only input. */
+        @Throws(IOException::class)
+        fun read0(sumfile: File, datafile: File): ExpectedAndActual {
+            val kindstring = Basepath.ext(sumfile.name)?.toUpperCase() ?: throw IOException("Invalid checksum file: $sumfile")
+            Without.throwableOrNull { valueOf(kindstring) } ?: throw IOException("Invalid checksum file: $sumfile")
+            val expected = readChecksum01(sumfile)
+            val actual = digest(datafile)
+            return ExpectedAndActual(expected.sum.toLowerCase(), actual)
+        }
+
+        /** Like readChecksum1() but allow sum only input. */
+        @Throws(IOException::class)
+        fun readChecksum01(sumfile: File): SumAndPath {
+            return readChecksum0(sumfile.readText())
+        }
+
+        /** Like readChecksums() but allow sum only input. */
+        fun readChecksums0(sumfile: File, callback: (SumAndPath?, String) -> Unit) {
+            for (line in sumfile.readLines()) {
+                if (line.isEmpty()) continue
+                callback(readChecksum0(line, this), line)
+            }
+        }
     }
 }

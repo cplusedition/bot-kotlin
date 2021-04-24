@@ -17,11 +17,11 @@
 
 package com.cplusedition.bot.builder
 
-import com.cplusedition.bot.core.FileUtil.Companion.FileUt
-import com.cplusedition.bot.core.TextUtil
-import com.cplusedition.bot.core.TextUtil.Companion.TextUt
+import com.cplusedition.bot.core.FileUt
+import com.cplusedition.bot.core.TextUt
 import com.cplusedition.bot.core.listOrEmpty
 import java.io.File
+import java.io.InputStream
 import kotlin.reflect.KCallable
 import kotlin.reflect.KClass
 
@@ -34,7 +34,7 @@ open class BuilderUtil {
     }
 
     /**
-     * Walk up to the ancestors and return the first subtree that exists. For example:
+     * Walk up to the ancestors of the given dir and return the first subtree that exists. For example:
      *      ancestorTree("workspace/opt/loca/bin")
      * look for an ancestor named workspace that contains a subtree opt/local/bin.
      *
@@ -62,7 +62,7 @@ open class BuilderUtil {
     }
 
     /**
-     * Walk up the ancestor, look at its siblings and return the first subtree that exists. For example:
+     * Walk up the ancestor of the given dir, look at its siblings and return the first subtree that exists. For example:
      *      ancestorSiblingTree("workspace/opt/loca/bin")
      * look for an ancestor with a child called workspace and contains a subtree opt/local/bin.
      *
@@ -102,7 +102,7 @@ open class BuilderUtil {
      * @return A human readable size string, eg 1210 kB.
      */
     fun filesizeString(size: Long): String {
-        return TextUtil.TextUt.decUnit4String(size) + "B"
+        return TextUt.decUnit4String(size) + "B"
     }
 
     fun fail(msg: String? = null): Nothing {
@@ -121,6 +121,34 @@ open class BuilderUtil {
         error(c.simpleName)
     }
 
+}
+
+/// Read a chunk of the given size, without closing the original input stream.
+open class ChunkInputStream(
+        private val input: InputStream,
+        private val size: Int
+) : InputStream() {
+    private var position = 0
+    private var closed = false
+    override fun read(): Int {
+        if (closed || position >= size) return -1
+        val ret = input.read()
+        if (ret >= 0) ++position
+        return ret
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        if (closed || position >= size) return -1
+        val available = size - position
+        val count = if (len > available) available else len
+        val ret = input.read(b, off, count)
+        position += ret
+        return ret;
+    }
+
+    override fun close() {
+        closed = true
+    }
 }
 
 //////////////////////////////////////////////////////////////////////

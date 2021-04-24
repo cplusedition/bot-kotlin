@@ -1,7 +1,4 @@
-rootProject.name = 'bot-kotlin'
-// For Gradle 4.10.1.
-enableFeaturePreview('STABLE_PUBLISHING')
-
 include 'bot-core'
 include 'bot-builder'
 include 'bot-build'
+

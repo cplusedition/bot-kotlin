@@ -21,8 +21,6 @@ import com.cplusedition.bot.builder.*
 import com.cplusedition.bot.builder.test.zzz.TestBase
 import com.cplusedition.bot.core.*
 import com.cplusedition.bot.core.ChecksumUtil.ChecksumKind
-import com.cplusedition.bot.core.FileUtil.Companion.FileUt
-import com.cplusedition.bot.core.RandomUtil.Companion.RandomUt
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.File
@@ -39,7 +37,7 @@ class TestTaskdef01 : TestBase() {
                 assertEquals(16, task(Zip(tmpFile(), filesdir)).oks.size)
                 assertEquals(5, task(Zip(tmpFile(), filesdir, "dir1/**/*.txt")).oks.size)
                 assertEquals(4, task(Zip(tmpFile(), filesdir, "dir1/**/*.txt", "**/dir1a/**")).oks.size)
-                assertEquals(14, task(Zip(tmpFile(), filesdir, exclude = "**/dir1a/**")).oks.size)
+                assertEquals(14, task(Zip(tmpFile(), filesdir, null, "**/dir1a/**")).oks.size)
             }
             subtest("add") {
                 assertEquals(5, task(Zip(tmpFile()).add(Fileset(filesdir, "dir1/**/*.txt"))).oks.size)
@@ -48,7 +46,7 @@ class TestTaskdef01 : TestBase() {
                 assertEquals(16, task(Zip(tmpFile()).add(filesdir)).oks.size)
                 assertEquals(5, task(Zip(tmpFile()).add(filesdir, "dir1/**/*.txt")).oks.size)
                 assertEquals(4, task(Zip(tmpFile()).add(filesdir, "dir1/**/*.txt", "**/dir1a/**")).oks.size)
-                assertEquals(14, task(Zip(tmpFile()).add(filesdir, exclude = "**/dir1a/**")).oks.size)
+                assertEquals(14, task(Zip(tmpFile()).add(filesdir, null, "**/dir1a/**")).oks.size)
             }
             subtest("with prefix") {
                 for (rpath in task(Zip(tmpFile()).withPrefix(Fileset(filesdir, "dir1/**/*.txt"))).oks) {
@@ -62,7 +60,7 @@ class TestTaskdef01 : TestBase() {
                 val tmpdir = tmpDir()
                 task(Copy(tmpdir, filesdir))
                 val dir1 = tmpdir.file("dir1")
-                dir1.walker.bottomUp().walk { file, _ ->
+                dir1.ut.walk(bottomup = true) { file, _ ->
                     U.setNotReadable(file)
                 }
                 try {
@@ -70,7 +68,7 @@ class TestTaskdef01 : TestBase() {
                     assertEquals(4, result.fails.size)
                     assertTrue(log.resetErrorCount() > 0)
                 } finally {
-                    dir1.walker.walk { file, _ ->
+                    dir1.ut.walk { file, _ ->
                         FileUt.setWorldReadonly(file)
                     }
                 }
@@ -88,7 +86,7 @@ class TestTaskdef01 : TestBase() {
             val outdir = tmpDir()
             FileUt.unzip(outdir, zipfile)
             var count = 0
-            outdir.walker.walk { file, rpath ->
+            outdir.ut.walk { file, rpath ->
                 if (file.isFile || rpath.endsWith("empty.dir")) {
                     ++count
                     checkPreserveTimestamp(true, file, filesdir.file(rpath), 2000)
@@ -103,7 +101,7 @@ class TestTaskdef01 : TestBase() {
             val outdir = tmpDir()
             FileUt.unzip(outdir, zipfile)
             var count = 0
-            outdir.walker.walk { file, rpath ->
+            outdir.ut.walk { file, rpath ->
                 if (file.isFile || rpath.endsWith("empty.dir")) {
                     ++count
                     checkPreserveTimestamp(false, file, filesdir.file(rpath), 2000)
@@ -129,9 +127,8 @@ class TestTaskdef01 : TestBase() {
                 assertFalse(log.getLog().join("").contains("dir2/dir2a/"))
                 val result = task(Zip(tmpFile(), Fileset(filesdir, "dir2/**/*.txt")).setVerbose(true))
                 assertTrue(log.getLog().join("").contains("dir2/dir2a/"))
-                assertFalse(log.getLog().join("").contains(Regex(".*:\\s*[\\d.]+\\s+\\w?B")))
-                log.d(result)
-                assertTrue(log.getLog().join("").contains(Regex(".*:\\s*[\\d.]+\\s+\\w?B")))
+                assertTrue(result.toString().contains(Regex(".*:\\s*[\\d.]+\\s+\\w?B")))
+                assertTrue(result.toString(true).contains(Regex(".*:\\s*[\\d.]+\\s+\\w?B")))
             }
         }
     }
@@ -145,14 +142,14 @@ class TestTaskdef01 : TestBase() {
                 assertEquals(11, task(Copy(tmpDir(), filesdir)).copied.size)
                 assertEquals(5, task(Copy(tmpDir(), filesdir, "dir1/**/*.txt")).copied.size)
                 assertEquals(4, task(Copy(tmpDir(), filesdir, "dir1/**/*.txt", "**/dir1a/**")).copied.size)
-                assertEquals(10, task(Copy(tmpDir(), filesdir, exclude = "**/dir1a/**")).copied.size)
+                assertEquals(10, task(Copy(tmpDir(), filesdir, null, "**/dir1a/**")).copied.size)
             }
             subtest("add") {
                 assertEquals(11, task(Copy(tmpDir()).add(Fileset(filesdir))).copied.size)
                 assertEquals(11, task(Copy(tmpDir()).add(filesdir)).copied.size)
                 assertEquals(5, task(Copy(tmpDir()).add(filesdir, "dir1/**/*.txt")).copied.size)
                 assertEquals(4, task(Copy(tmpDir()).add(filesdir, "dir1/**/*.txt", "**/dir1a/**")).copied.size)
-                assertEquals(10, task(Copy(tmpDir()).add(filesdir, exclude = "**/dir1a/**")).copied.size)
+                assertEquals(10, task(Copy(tmpDir()).add(filesdir, null,  "**/dir1a/**")).copied.size)
             }
             subtest("preserveTimestamp=true") {
                 val tmpdir = tmpDir()
@@ -170,7 +167,7 @@ class TestTaskdef01 : TestBase() {
                 val tmpdir = tmpDir()
                 task(Copy(tmpdir, filesdir))
                 val dir1 = tmpdir.file("dir1")
-                dir1.deleteSubtrees()
+                dir1.deleteSubtreesOrFail()
                 dir1.setReadOnly()
                 try {
                     val result = task(Copy(tmpdir, filesdir))
@@ -193,7 +190,7 @@ class TestTaskdef01 : TestBase() {
                 assertEquals(11, task(CopyDiff(tmpDir(), filesdir)).copied.size)
                 assertEquals(5, task(CopyDiff(tmpDir(), filesdir, "dir1/**/*.txt")).copied.size)
                 assertEquals(4, task(CopyDiff(tmpDir(), filesdir, "dir1/**/*.txt", "**/dir1a/**")).copied.size)
-                assertEquals(10, task(CopyDiff(tmpDir(), filesdir, exclude = "**/dir1a/**")).copied.size)
+                assertEquals(10, task(CopyDiff(tmpDir(), filesdir, null,  "**/dir1a/**")).copied.size)
             }
             subtest("add") {
                 assertEquals(11, task(CopyDiff(tmpDir()).add(Fileset(filesdir))).copied.size)
@@ -239,8 +236,8 @@ class TestTaskdef01 : TestBase() {
                 assertFalse(fromfile.lastModified() == tofile.lastModified())
                 assertTrue(tmpdir.file("dir1/file1.txt").exists())
                 assertEquals(
-                    filesdir.file("dir2/file2.txt").lastModified(),
-                    tmpdir.file("dir2/file2.txt").lastModified()
+                        filesdir.file("dir2/file2.txt").lastModified(),
+                        tmpdir.file("dir2/file2.txt").lastModified()
                 )
             }
         }
@@ -254,7 +251,7 @@ class TestTaskdef01 : TestBase() {
                 val tmpdir = tmpDir()
                 task(Copy(tmpdir, filesdir))
                 val dir1 = tmpdir.file("dir1")
-                dir1.deleteSubtrees()
+                dir1.deleteSubtreesOrFail()
                 dir1.setReadOnly()
                 task(Remove(tmpdir, "dir2/file1.txt"))
                 try {
@@ -265,8 +262,8 @@ class TestTaskdef01 : TestBase() {
                     // Not printing not copied.
                     assertFalse(result.toString().contains("dir2/file2.txt"))
                     // Printing copied and failed.
-                    assertTrue(result.toString().contains("dir2/file1.txt"))
-                    assertTrue(result.toString().contains("dir1/file2.txt"))
+                    assertTrue(result.toString(true).contains("dir2/file1.txt"))
+                    assertTrue(result.toString(true).contains("dir1/file2.txt"))
                     assertEquals(5, log.resetErrorCount())
                 } finally {
                     dir1.setWritable(true, true)
@@ -285,12 +282,12 @@ class TestTaskdef01 : TestBase() {
                 val total = copy.copied.size
                 log.d(copy.copied)
                 val removed = task(
-                    Remove(Fileset(tmpdir).includes("empty*", "dir1/**").filesOnly())
+                        Remove(Fileset(tmpdir).includes("empty*", "dir1/**").filesOnly())
                 ).okCount
                 assertEquals(6, removed)
                 tmpdir.file("dir2/new.txt").writeText("testing 3435273")
-                val files = Fileset(tmpdir, ".*").files().count()
-                val dirs = Fileset(tmpdir, ".*").dirs().count()
+                val files = Fileset(tmpdir, ".*").pairOfFiles().count()
+                val dirs = Fileset(tmpdir, ".*").pairOfDirs().count()
                 log.d("# $files files, $dirs dirs")
                 val copydiff = task(CopyDiff(tmpdir, Fileset(filesdir)))
                 val actual = copydiff.copied.size
@@ -309,7 +306,7 @@ class TestTaskdef01 : TestBase() {
                 assertEquals(11, task(CopyMirror(tmpDir(), filesdir)).copied.size)
                 assertEquals(5, task(CopyMirror(tmpDir(), filesdir, "dir1/**/*.txt")).copied.size)
                 assertEquals(4, task(CopyMirror(tmpDir(), filesdir, "dir1/**/*.txt", "**/dir1a/**")).copied.size)
-                assertEquals(10, task(CopyMirror(tmpDir(), filesdir, exclude = "**/dir1a/**")).copied.size)
+                assertEquals(10, task(CopyMirror(tmpDir(), filesdir, null,  "**/dir1a/**")).copied.size)
             }
             subtest("preserveTimestamp=true") {
                 val tmpdir = tmpDir()
@@ -343,7 +340,7 @@ class TestTaskdef01 : TestBase() {
             val tmpdir = tmpDir()
             task(Copy(tmpdir, filesdir))
             val dir1 = tmpdir.file("dir1")
-            dir1.deleteSubtrees()
+            dir1.deleteSubtreesOrFail()
             dir1.setReadOnly()
             try {
                 val result = task(CopyMirror(tmpdir, filesdir))
@@ -367,7 +364,7 @@ class TestTaskdef01 : TestBase() {
                 log.d(result)
                 assertEquals(4, result.extraFilesRemoveFailed.size)
                 assertEquals(2, result.extraDirsRemoveFailed.size)
-                assertEquals(2, log.resetErrorCount())
+                assertEquals(6, log.resetErrorCount())
             } finally {
                 dir1.setWritable(true, true)
             }
@@ -401,13 +398,12 @@ class TestTaskdef01 : TestBase() {
                 val tmpdir2 = tmpDir()
                 task0(Copy(tmpdir2, Fileset(filesdir)))
                 val result = task(CopyMirror(tmpdir2, Fileset(tmpdir)))
-                checkPrintStat(false, false, log.getLog().join("").lines())
-                log.d(result.toString0()) // Default print nothing.
-                checkPrintStat(true, false, log.getLog().join("").lines())
-                log.d(result)
-                checkPrintStat(true, true, log.getLog().join("").lines())
-                log.d(result.toString(notcopied = true))
-                assertEquals(true, log.getLog().join("").lines().any { it.startsWith("# Not copied:") })
+                log.d(result.toString())
+                checkPrintStat(false, false, result.toString().lines())
+                log.d(result.toString0())
+                checkPrintStat(true, false, result.toString0().lines())
+                checkPrintStat(true, true, result.toString(true).lines())
+                assertEquals(true, result.toString(false).lines().any { it.startsWith("# Not copied:") })
                 assertEquals(1, result.copied.size)
                 assertEquals(copy.copied.size - remove.filesOK.size, result.notCopied.size)
                 assertEquals(6, result.extraFiles.size)
@@ -426,21 +422,21 @@ class TestTaskdef01 : TestBase() {
             subtest("constructor(Fileset)") {
                 val tmpdir = tmpDir()
                 val expected = task(Copy(tmpdir, Fileset(filesdir))).copied.size
-                assertEquals(expected, Fileset(tmpdir).files().count())
+                assertEquals(expected, Fileset(tmpdir).pairOfFiles().count())
                 val actual = task(Remove(Fileset(tmpdir).filesOnly())).okCount
                 assertEquals(expected, actual)
             }
             subtest("constructor(File, String, String)") {
                 val tmpdir = tmpDir()
                 task(Copy(tmpdir, Fileset(filesdir)))
-                val expected = Fileset(tmpdir).collect().count()
+                val expected = Fileset(tmpdir).pairOfAny().count()
                 val actual = task(Remove(tmpdir, "**", null)).okCount
                 assertEquals(expected, actual)
             }
             subtest("add(Fileset)") {
                 val tmpdir = tmpDir()
                 task(Copy(tmpdir, Fileset(filesdir)))
-                val expected = Fileset(tmpdir).dirs().count()
+                val expected = Fileset(tmpdir).pairOfDirs().count()
                 task(Remove().add(Fileset(tmpdir).filesOnly()))
                 val actual = task(Remove(Fileset(tmpdir).dirsOnly())).okCount
                 assertEquals(expected, actual)
@@ -448,7 +444,7 @@ class TestTaskdef01 : TestBase() {
             subtest("add(File, String, String)") {
                 val tmpdir = tmpDir()
                 task(Copy(tmpdir, Fileset(filesdir)))
-                val expected = Fileset(tmpdir).collect().count()
+                val expected = Fileset(tmpdir).pairOfAny().count()
                 val actual = task(Remove().add(tmpdir, "**", null)).okCount
                 assertEquals(expected, actual)
             }
@@ -456,10 +452,10 @@ class TestTaskdef01 : TestBase() {
                 val tmpdir = tmpDir()
                 task(Copy(tmpdir, Fileset(filesdir)))
                 val remove = task(
-                    Remove(
-                        Fileset(tmpdir).includes("empty*"),
-                        Fileset(tmpdir).includes("dir1/**")
-                    )
+                        Remove(
+                                Fileset(tmpdir).includes("empty*"),
+                                Fileset(tmpdir).includes("dir1/**")
+                        )
                 )
                 assertEquals(9, remove.total)
                 assertEquals(9, remove.okCount)
@@ -486,17 +482,16 @@ class TestTaskdef01 : TestBase() {
 
                 val tmpdir = tmpDir()
                 task(Copy(tmpdir, Fileset(filesdir)))
-                val remove = task(Remove(Fileset(tmpdir).includes("empty*", "dir1/**")))
-                checkPrintStat(false, log.getLog().join("").lines())
-                log.d(remove.toString())
-                checkPrintStat(true, log.getLog().join("").lines())
-                assertEquals(9, remove.total)
-                assertEquals(9, remove.okCount)
-                assertEquals(0, remove.failedCount)
-                assertEquals(6, remove.filesOK.size)
-                assertEquals(3, remove.dirsOK.size)
-                assertEquals(0, remove.filesFailed.size)
-                assertEquals(0, remove.dirsFailed.size)
+                val result = task(Remove(Fileset(tmpdir).includes("empty*", "dir1/**")))
+                checkPrintStat(false, result.toString().lines())
+                checkPrintStat(true, result.toString(true).lines())
+                assertEquals(9, result.total)
+                assertEquals(9, result.okCount)
+                assertEquals(0, result.failedCount)
+                assertEquals(6, result.filesOK.size)
+                assertEquals(3, result.dirsOK.size)
+                assertEquals(0, result.filesFailed.size)
+                assertEquals(0, result.dirsFailed.size)
             }
         }
     }
@@ -512,28 +507,26 @@ class TestTaskdef01 : TestBase() {
                 assertEquals(summary, logs.any { it == "# Remove dir failed: 2" })
                 assertEquals(detail, logs.any { it == "empty.dir" })
                 assertEquals(detail, logs.any { it == "dir1/dir1a/file1a.txt" })
-                assertEquals(detail, logs.any { it == "dir1" })
             }
 
             val tmpdir = tmpDir()
             task(Copy(tmpdir, Fileset(filesdir)))
-            tmpdir.file("dir1").walker.bottomUp().walk { file, _ ->
+            tmpdir.file("dir1").ut.walk(bottomup = true) { file, _ ->
                 file.setReadOnly()
             }
             try {
-                val remove = task(Remove(Fileset(tmpdir).includes("empty*", "dir1/**")))
-                assertEquals(9, remove.total)
-                assertEquals(6, remove.okCount)
-                assertEquals(3, remove.failedCount)
-                assertEquals(5, remove.filesOK.size)
-                assertEquals(1, remove.dirsOK.size)
-                assertEquals(1, remove.filesFailed.size)
-                assertEquals(2, remove.dirsFailed.size)
-                checkPrintStat(false, false, log.getLog().join("").lines())
-                log.d(remove.toString(true, true))
-                checkPrintStat(true, true, log.getLog().join("").lines())
+                val result = task(Remove(Fileset(tmpdir).includes("empty*", "dir1/**")))
+                assertEquals(9, result.total)
+                assertEquals(6, result.okCount)
+                assertEquals(3, result.failedCount)
+                assertEquals(5, result.filesOK.size)
+                assertEquals(1, result.dirsOK.size)
+                assertEquals(1, result.filesFailed.size)
+                assertEquals(2, result.dirsFailed.size)
+                checkPrintStat(false, false, result.toString().lines())
+                checkPrintStat(true, true, result.toString(true).lines())
             } finally {
-                tmpdir.file("dir1").walker.walk { file, _ ->
+                tmpdir.file("dir1").ut.walk { file, _ ->
                     file.setWritable(true, true)
                 }
                 log.resetErrorCount()
@@ -596,7 +589,7 @@ class TestTaskdef01 : TestBase() {
                 val sumfile = tmpFile()
                 task(Copy(tmpdir, filesdir))
                 val dir1 = tmpdir.file("dir1")
-                dir1.walker.bottomUp().walk { file, _ ->
+                dir1.ut.walk(bottomup = true) { file, _ ->
                     U.setNotReadable(file)
                 }
                 try {
@@ -609,7 +602,7 @@ class TestTaskdef01 : TestBase() {
                     assertTrue(output, output.contains("${ChecksumKind.SHA256}"))
                     assertTrue(log.resetErrorCount() > 0)
                 } finally {
-                    dir1.walker.walk { file, _ ->
+                    dir1.ut.walk { file, _ ->
                         FileUt.setWorldReadonly(file)
                     }
                 }
@@ -665,19 +658,19 @@ class TestTaskdef01 : TestBase() {
             task(Copy(tmpdir, filesdir))
             try {
                 task(Checksum(sumfile, ChecksumKind.SHA1, tmpdir))
-                dir1.walker.bottomUp().walk { file, _ ->
+                dir1.ut.walk(bottomup = true) { file, _ ->
                     FileUt.setPermission(
-                        setOf(
-                            PosixFilePermission.OWNER_WRITE,
-                            PosixFilePermission.OWNER_EXECUTE
-                        ), file
+                            setOf(
+                                    PosixFilePermission.OWNER_WRITE,
+                                    PosixFilePermission.OWNER_EXECUTE
+                            ), file
                     )
                 }
                 val result = task(VerifyChecksum(sumfile, ChecksumKind.SHA1, tmpdir))
                 assertEquals(5, result.fails.size)
                 assertTrue(log.resetErrorCount() > 0)
             } finally {
-                dir1.walker.walk { file, _ ->
+                dir1.ut.walk { file, _ ->
                     FileUt.setWorldReadonly(file)
                 }
             }
@@ -687,10 +680,10 @@ class TestTaskdef01 : TestBase() {
     private object U {
         fun setNotReadable(file: File) {
             FileUt.setPermission(
-                setOf(
-                    PosixFilePermission.OWNER_WRITE,
-                    PosixFilePermission.OWNER_EXECUTE
-                ), file
+                    setOf(
+                            PosixFilePermission.OWNER_WRITE,
+                            PosixFilePermission.OWNER_EXECUTE
+                    ), file
             )
         }
     }

@@ -18,7 +18,7 @@
 package com.cplusedition.bot.builder.test.core
 
 import com.cplusedition.bot.builder.test.zzz.TestBase
-import com.cplusedition.bot.core.ReflectUtil.Companion.ReflectUt
+import com.cplusedition.bot.core.ReflectUt
 import org.junit.Assert.*
 import org.junit.Test
 

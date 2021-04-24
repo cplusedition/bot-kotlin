@@ -18,12 +18,8 @@
 package com.cplusedition.bot.builder.test.core
 
 import com.cplusedition.bot.builder.test.zzz.TestBase
-import com.cplusedition.bot.core.CoreLogger
-import com.cplusedition.bot.core.Fun10
-import com.cplusedition.bot.core.ICoreLogger
-import com.cplusedition.bot.core.ProcessUtil.Companion.ProcessUt
+import com.cplusedition.bot.core.*
 import com.cplusedition.bot.core.WithUtil.Companion.With
-import com.cplusedition.bot.core.join
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.IOException
@@ -106,7 +102,7 @@ class TestCoreLogger01 : TestBase() {
             assertEquals(1, log.errorCount)
             log.leave()
             assertEquals(1, log.errorCount)
-            assertTrue(With.throwable { log.leaveX() } is IllegalStateException)
+            assertTrue(With.throwableOrNull { log.leaveX() } is IllegalStateException)
             log.resetErrorCount()
             log.leaveX()
             assertEquals(0, log.errorCount)
@@ -126,7 +122,7 @@ class TestCoreLogger01 : TestBase() {
             log.leave()
             log.leave("msg")
             log.leave()
-            assertTrue(With.throwable { log.leaveX("msg") } is java.lang.IllegalStateException)
+            assertTrue(With.throwableOrNull { log.leaveX("msg") } is java.lang.IllegalStateException)
             log.resetErrorCount()
             log.leaveX()
             log.leaveX("msg")
@@ -154,7 +150,7 @@ class TestCoreLogger01 : TestBase() {
             log.enterX(this::testEnterLeave02) {
                 log.enterX(this::testEnterLeave02, "msg") {
                     log.enterX(TestCoreLogger01::class) {
-                        assertTrue(With.throwable {
+                        assertTrue(With.throwableOrNull {
                             log.enterX(TestCoreLogger01::class, "msg") {
                                 log.enter(this::testEnterLeave02) {
                                     log.enter(this::testEnterLeave02, "msg") {
@@ -191,6 +187,10 @@ class TestCoreLogger01 : TestBase() {
             assertTrue(output.contains("------- TestCoreLogger01"))
             assertTrue(output.contains("-------- TestCoreLogger01: msg"))
         }
+    }
+
+    @Test
+    fun testSaveLog01() {
         subtest {
             fun check(output: String) {
                 assertTrue(output.contains("+ testEnterLeave02"))
@@ -233,10 +233,21 @@ class TestCoreLogger01 : TestBase() {
             val file = tmpFile()
             log.saveLog(file)
             /// Note that this is a sync call and thus make sure savelog() is completed.
-            check(log.getLog().join(""))
-            val text = file.readText()
-            log.d("# savelog:\n$text")
-            check(text)
+            if(true) {
+                val text = log.getLog().join("")
+                check(text)
+                assertEquals(17, text.split("\n").size)
+            }
+            if (true) {
+                val text = file.readText()
+                val lines = text.split("\n")
+                log.d("# lines: ${lines.size}")
+                for(line in lines) {
+                    log.d("|$line|")
+                }
+                check(text)
+                assertEquals(17, lines.size)
+            }
         }
     }
 
@@ -291,9 +302,9 @@ class TestCoreLogger01 : TestBase() {
         }
         subtest {
             val log = CoreLogger(debugging = true)
-            assertTrue(With.exception { log.enterX { throw IOException("Expected IOException") } } is java.lang.IllegalStateException)
+            assertTrue(With.exceptionOrNull { log.enterX { throw IOException("Expected IOException") } } is java.lang.IllegalStateException)
             assertEquals(1, log.errorCount)
-            assertTrue(With.exception { log.enterX<String> { throw IOException("Expected IOException") } } is java.lang.IllegalStateException)
+            assertTrue(With.exceptionOrNull { log.enterX<String> { throw IOException("Expected IOException") } } is java.lang.IllegalStateException)
             assertEquals(2, log.errorCount)
             log.resetErrorCount()
         }
@@ -344,10 +355,10 @@ class TestCoreLogger01 : TestBase() {
                 log.resetErrorCount()
             }
             val output = log.getLog()
-            assertTrue(output.contains("debug formatted"))
-            assertTrue(output.contains("info formatted"))
-            assertTrue(output.contains("warn formatted"))
-            assertTrue(output.contains("error formatted"))
+            assertTrue(output.contains("debug formatted\n"))
+            assertTrue(output.contains("info formatted\n"))
+            assertTrue(output.contains("warn formatted\n"))
+            assertTrue(output.contains("error formatted\n"))
         }
     }
 

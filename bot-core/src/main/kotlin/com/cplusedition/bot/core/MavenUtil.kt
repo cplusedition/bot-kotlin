@@ -122,7 +122,7 @@ open class MavenUtil {
              * @return true if no error.
              */
             fun write(file: File, gas: Collection<GA>): Boolean {
-                return With.exception {
+                return With.exceptionOrNull {
                     With.printWriter(file) { writer ->
                         for (ga in gas) {
                             writer.println("$ga")
@@ -274,7 +274,7 @@ open class MavenUtil {
              * @return true if no error.
              */
             fun write(file: File, gavs: Collection<GAV>): Boolean {
-                return With.exception {
+                return With.exceptionOrNull {
                     With.printWriter(file) { writer ->
                         for (gav in gavs) {
                             writer.println(gav.gav)
@@ -309,7 +309,7 @@ open class MavenUtil {
                     return 1
                 }
                 if (q.startsWith("sp") && q.length > 2) {
-                    return Without.exception {
+                    return Without.exceptionOrNull {
                         Integer.parseInt(q.substring(2)) + 1
                     } ?: -1
                 }
@@ -382,7 +382,7 @@ open class MavenUtil {
             fun sort(versions: Iterable<String>): List<String> {
                 val map = TreeMap<ArtifactVersion, String>()
                 for (version in versions) {
-                    Without.exception {
+                    Without.exceptionOrNull {
                         map.put(parse(version), version)
                     }
                 }

@@ -22,9 +22,6 @@ import com.cplusedition.bot.builder.Fileset
 import com.cplusedition.bot.builder.Fileset.RegexFilter
 import com.cplusedition.bot.builder.test.zzz.TestBase
 import com.cplusedition.bot.core.*
-import com.cplusedition.bot.core.FileUtil.Companion.FileUt
-import com.cplusedition.bot.core.ProcessUtil.Companion.ProcessUt
-import com.cplusedition.bot.core.RandomUtil.Companion.RandomUt
 import com.cplusedition.bot.core.WithUtil.Companion.With
 import com.cplusedition.bot.core.WithoutUtil.Companion.Without
 import org.junit.Assert.*
@@ -34,16 +31,22 @@ import java.io.IOException
 
 class TestFileUt01 : TestBase() {
 
-
     @Test
     fun testBasic01() {
         log.run {
-            d("# $trashDir")
+            d("# ${trashDir()}")
             d("# ${conf.builder.dir}")
             d("# $testResDir")
         }
         assertTrue(testResDir.file("files/empty.txt").exists())
-        assertTrue(tmpDir().listOrEmpty().isEmpty())
+        With.tmpdir { dir ->
+            assertTrue(dir.listOrEmpty().isEmpty())
+            dir.file("notexists").ut.walk { _, _ -> fail() }
+        }
+        With.tmpfile { file ->
+            assertTrue(file.listOrEmpty().isEmpty())
+            file.ut.walk { _, _ -> fail() }
+        }
     }
 
     @Test
@@ -56,13 +59,13 @@ class TestFileUt01 : TestBase() {
         fun check(path: String, dir: String?, name: String, base: String, suffix: String) {
             val basepath = Basepath.from(path)
             assertEquals(path, dir, basepath.dir)
-            assertEquals(path, name, basepath.name)
-            assertEquals(path, base, basepath.base)
+            assertEquals(path, name, basepath.nameWithSuffix)
+            assertEquals(path, base, basepath.nameWithoutSuffix)
             assertEquals(path, suffix, basepath.suffix)
             assertEquals(path, suffix.toLowerCase(), basepath.lcSuffix)
             assertEquals(path, dir, Basepath.dir(path))
-            assertEquals(path, name, Basepath.name(path))
-            assertEquals(path, base, Basepath.base(path))
+            assertEquals(path, name, Basepath.nameWithSuffix(path))
+            assertEquals(path, base, Basepath.nameWithoutSuffix(path))
             assertEquals(path, suffix, Basepath.suffix(path))
             assertEquals(path, suffix.toLowerCase(), Basepath.lcSuffix(path))
             assertEquals(path, basepath.ext, Basepath.ext(path))
@@ -76,7 +79,7 @@ class TestFileUt01 : TestBase() {
             assertEquals(path, suffix.toLowerCase(), file.lcSuffix)
         }
         check("", null, "", "", "")
-        check(".abc", null, ".abc", "", ".abc")
+        check(".abc", null, ".abc", ".abc", "")
         check("abc", null, "abc", "abc", "")
         check("abc.", null, "abc.", "abc", ".")
         check("abc/", null, "abc", "abc", "")
@@ -95,27 +98,79 @@ class TestFileUt01 : TestBase() {
     fun testBasepath02() {
         fun check(basepath: Basepath, dir: String?, name: String, base: String, suffix: String) {
             assertEquals(dir, basepath.dir)
-            assertEquals(name, basepath.name)
-            assertEquals(base, basepath.base)
+            assertEquals(name, basepath.nameWithSuffix)
+            assertEquals(base, basepath.nameWithoutSuffix)
             assertEquals(suffix, basepath.suffix)
         }
-        check(Basepath.from("abc.123").changeName("123.abc"), null, "123.abc", "123", ".abc")
-        check(Basepath.from("abc.123").changeName("123abc"), null, "123abc", "123abc", "")
-        check(Basepath.from("abc123").changeName("123.abc"), null, "123.abc", "123", ".abc")
-        check(Basepath.from("abc.123").changeBase("cde"), null, "cde.123", "cde", ".123")
+        check(Basepath.from("abc.123").changeNameWithSuffix("123.abc"), null, "123.abc", "123", ".abc")
+        check(Basepath.from("abc.123").changeNameWithSuffix("123abc"), null, "123abc", "123abc", "")
+        check(Basepath.from("abc123").changeNameWithSuffix("123.abc"), null, "123.abc", "123", ".abc")
+        check(Basepath.from("abc.123").changeNameWithoutSuffix("cde"), null, "cde.123", "cde", ".123")
         check(Basepath.from("abc.123").changeSuffix(".cde"), null, "abc.cde", "abc", ".cde")
-        check(Basepath.from("a/abc/abc.123").changeName("123"), "a/abc", "123", "123", "")
-        check(Basepath.from("a/abc/abc.123").changeBase("cde"), "a/abc", "cde.123", "cde", ".123")
+        check(Basepath.from("a/abc/abc.123").changeNameWithSuffix("123"), "a/abc", "123", "123", "")
+        check(Basepath.from("a/abc/abc.123").changeNameWithoutSuffix("cde"), "a/abc", "cde.123", "cde", ".123")
         check(Basepath.from("a/abc/abc.123").changeSuffix("cde"), "a/abc", "abccde", "abccde", "")
-        assertEquals(Basepath.from("a/abc"), Basepath.from("a/123.abc").changeName("abc"))
-        assertEquals(Basepath.from("a/abc.abc"), Basepath.from("a/123.abc").changeBase("abc"))
+        assertEquals(Basepath.from("a/abc"), Basepath.from("a/123.abc").changeNameWithSuffix("abc"))
+        assertEquals(Basepath.from("a/abc.abc"), Basepath.from("a/123.abc").changeNameWithoutSuffix("abc"))
         assertEquals(Basepath.from("a/123cde"), Basepath.from("a/123.abc").changeSuffix("cde"))
-        assertEquals("a/abc", Basepath.changeName("a/123.abc", "abc"))
-        assertEquals("a/abc.abc", Basepath.changeBase("a/123.abc", "abc"))
+        assertEquals("a/abc", Basepath.changeNameWithSuffix("a/123.abc", "abc"))
+        assertEquals("a/abc.abc", Basepath.changeNameWithoutSuffix("a/123.abc", "abc"))
         assertEquals("a/123cde", Basepath.changeSuffix("a/123.abc", "cde"))
-        assertEquals(File("a/abc"), File("a/123.abc").changeName("abc"))
-        assertEquals(File("a/abc.abc"), File("a/123.abc").changeBase("abc"))
+        assertEquals(File("a/abc"), File("a/123.abc").changeNameWithSuffix("abc"))
+        assertEquals(File("a/abc.abc"), File("a/123.abc").changeNameWithoutSuffix("abc"))
         assertEquals(File("a/123cde"), File("a/123.abc").changeSuffix("cde"))
+    }
+
+    @Test
+    fun testJoinPath01() {
+        subtest("Basepath.joinPath") {
+            fun check(expected: String, dir: String?, name: String) {
+                assertEquals(expected, expected, Basepath.joinPath(dir, name))
+            }
+            check("", null, "")
+            check("a", null, "a")
+            check(".", ".", "")
+            check("./a", ".", "a")
+            check("", "", "")
+            check("/a", "", "a")
+            check("/", "/", "")
+            check("/a", "/", "a")
+            check("a", "a", "")
+            check("a/b", "a", "b")
+            check("/a", "/a", "")
+            check("/a/b", "/a", "b")
+        }
+        subtest("Basepath.joinRpath") {
+            fun check(expected: String, dir: String?, name: String) {
+                assertEquals(expected, expected, Basepath.joinRpath(dir, name))
+            }
+            check("", null, "")
+            check("a", null, "a")
+            check("", ".", "")
+            check("a", ".", "a")
+            check("", "", "")
+            check("a", "", "a")
+            check("/", "/", "")
+            check("/a", "/", "a")
+            check("a", "a", "")
+            check("a/b", "a", "b")
+            check("/a", "/a", "")
+            check("/a/b", "/a", "b")
+        }
+    }
+
+    @Test
+    fun testSplitPath01() {
+        assertEquals(Pair(null, ""), Basepath.splitPath1(""))
+        assertEquals(Pair("", ""), Basepath.splitPath1("/"))
+        assertEquals(Pair(null, "a"), Basepath.splitPath1("a"))
+        assertEquals(Pair("", "a"), Basepath.splitPath1("/a"))
+        assertEquals(Pair("a", ""), Basepath.splitPath1("a/"))
+        assertEquals(Pair("/a", ""), Basepath.splitPath1("/a/"))
+        assertEquals(Pair("a", "b"), Basepath.splitPath1("a/b"))
+        assertEquals(Pair("a/b", ""), Basepath.splitPath1("a/b/"))
+        assertEquals(Pair("/a", "b"), Basepath.splitPath1("/a/b"))
+        assertEquals(Pair("/a/b", ""), Basepath.splitPath1("/a/b/"))
     }
 
     @Test
@@ -125,34 +180,34 @@ class TestFileUt01 : TestBase() {
         assertEquals(null, FileUt.rpathOrNull(File("../a/c/.././b/c.html").clean(), FileUt.pwd()))
         Without.exceptionOrFail { FileUt.pwd().mkparentOrFail() }
         With.exceptionOrFail { File("/").mkparentOrFail() }
-        Without.exceptionOrFail { FileUt.pwd().mkparentOrFail("test") }
-        With.exceptionOrFail { File("/test").mkparentOrFail("..") }
+        Without.exceptionOrFail { FileUt.pwd().file("test").mkparentOrFail() }
+        With.exceptionOrFail { File("/test").file("..").mkparentOrFail() }
         assertNotNull(FileUt.pwd().mkparentOrNull())
         assertNull(File("/").mkparentOrNull())
-        assertNotNull(FileUt.pwd().mkparentOrNull("test"))
-        assertNull(File("/test").mkparentOrNull(".."))
+        assertNotNull(FileUt.pwd().file("test").mkparentOrNull())
+        assertNull(File("/test").file("..").mkparentOrNull())
         Without.exceptionOrFail { tmpDir().mkdirsOrFail().existsOrFail() }
         Without.exceptionOrFail { File("/").mkdirsOrFail().existsOrFail() }
         With.exceptionOrFail { File("/notexists").mkdirsOrFail() }
-        Without.exceptionOrFail { tmpDir().mkdirsOrFail("test/a/b.txt").existsOrFail() }
-        With.exceptionOrFail { File("/").mkdirsOrFail("notexists") }
+        Without.exceptionOrFail { tmpDir().file("test/a/b.txt").mkdirsOrFail().existsOrFail() }
+        With.exceptionOrFail { File("/").file("notexists").mkdirsOrFail() }
         assertNotNull(tmpDir().mkdirsOrNull()?.existsOrNull())
         assertNotNull(File("/").mkdirsOrNull()?.existsOrNull())
         assertNull(File("/notexists").mkdirsOrNull())
-        assertNotNull(tmpDir().mkdirsOrNull("test")?.existsOrNull())
-        assertNull(File("/").mkdirsOrNull("notexists/test"))
-        assertNull(File("/").mkdirsOrNull("notexists/test"))
+        assertNotNull(tmpDir().file("test").mkdirsOrNull()?.existsOrNull())
+        assertNull(File("/").file("notexists/test").mkdirsOrNull())
+        assertNull(File("/").file("notexists/test").mkdirsOrNull())
         val tmpdir = tmpDir()
         val tmptestdir = tmpdir.file("test")
-        tmptestdir.mkdirsOrFail("a/b.txt")
-        tmptestdir.mkdirsOrFail("c")
+        tmptestdir.file("a/b.txt").mkdirsOrFail()
+        tmptestdir.file("c").mkdirsOrFail()
         tmptestdir.file("c/d.txt").writeText("xxx")
-        Without.exceptionOrFail { tmpdir.existsOrFail("test/a/b.txt") }
-        assertTrue(tmpdir.file("test").deleteSubtrees())
-        assertNotNull(tmpdir.existsOrNull("test"))
-        assertNull(tmpdir.existsOrNull("test/a"))
-        assertNull(tmpdir.existsOrNull("test/c"))
-        assertNull(tmpdir.existsOrNull("test/c/d.txt"))
+        Without.exceptionOrFail { tmpdir.file("test/a/b.txt").existsOrFail() }
+        assertNotNull(tmpdir.file("test").deleteSubtreesOrFail())
+        assertNotNull(tmpdir.file("test").existsOrNull())
+        assertNull(tmpdir.file("test/a").existsOrNull())
+        assertNull(tmpdir.file("test/c").existsOrNull())
+        assertNull(tmpdir.file("test/c/d.txt").existsOrNull())
         assertTrue(tmptestdir.listOrEmpty().isEmpty())
     }
 
@@ -188,6 +243,10 @@ class TestFileUt01 : TestBase() {
         assertEquals("", FileUt.cleanPath("./.").toString())
         assertEquals("/", FileUt.cleanPath("/././/").toString())
         assertEquals("/", FileUt.cleanPath("//a/../").toString())
+        assertEquals("a", FileUt.cleanPath("a").toString())
+        assertEquals("a/", FileUt.cleanPath("a/").toString())
+        assertEquals("/a", FileUt.cleanPath("/a").toString())
+        assertEquals("/a/", FileUt.cleanPath("/a/").toString())
         assertEquals("/a/b/c", FileUt.cleanPath("/a/b/./c").toString())
         assertEquals("/a/b/c/", FileUt.cleanPath("/a/b/./c/").toString())
         assertEquals("/a/c/", FileUt.cleanPath("/a/b/../c/").toString())
@@ -275,6 +334,38 @@ class TestFileUt01 : TestBase() {
     }
 
     @Test
+    fun testRpath01() {
+        val base = tmpDir()
+        assertEquals("", FileUt.rpath(base, base))
+        assertEquals(base.name, FileUt.rpath(base, base.parentFile))
+        assertEquals("a", FileUt.rpath(base.file("a"), base))
+        assertEquals("a/b", FileUt.rpath(base.file("a", "b"), base))
+        assertEquals("a/c", FileUt.rpath(base.file("a/b/..//./c/"), base))
+        assertEquals("..", FileUt.rpath(base.parentFile, base))
+        assertEquals("../test", FileUt.rpath(base.parentFile.file("test"), base))
+        assertEquals("", FileUt.rpath(base.parentFile.file(base.name), base))
+        assertEquals("", FileUt.rpath(FileUt.root(), FileUt.root()))
+        assertEquals("a", FileUt.rpath(FileUt.root("a"), FileUt.root()))
+        assertEquals("a/b", FileUt.rpath(FileUt.root("a", "b"), FileUt.root()))
+        assertEquals("a/b", FileUt.rpath(FileUt.root("a", "b", ""), FileUt.root()))
+        assertEquals("a/b", FileUt.rpath(FileUt.root("a/b/"), FileUt.root()))
+        assertEquals("b", FileUt.rpath(FileUt.root("a/b/"), FileUt.root("a")))
+        assertEquals("../a/b", FileUt.rpath(FileUt.root("a/b/"), FileUt.root("c/")))
+        assertEquals("../b", FileUt.rpath(FileUt.root("a/b"), FileUt.root("a/c/")))
+        assertEquals("../b/c/d", FileUt.rpath(FileUt.root("a/b/c/d"), FileUt.root("a/c")))
+        assertEquals("../../a/b", FileUt.rpath(FileUt.root("a/b/"), FileUt.root("c/b")))
+        assertEquals("..", FileUt.rpath(base.file(".."), base))
+        assertEquals("", FileUt.rpath(base.file("a/../"), base))
+        assertEquals("..", FileUt.rpath(base.file("a/../.."), base))
+        assertEquals("..", FileUt.rpath(base.file("a/../../"), base))
+        assertEquals(null, FileUt.rpath(FileUt.root(".."), FileUt.root()))
+        assertEquals(null, FileUt.rpath(FileUt.root(".."), FileUt.root("..")))
+        assertEquals(null, FileUt.rpath(FileUt.root(), FileUt.root("..")))
+        assertEquals("..", FileUt.rpath(FileUt.root(), FileUt.root("a")))
+        assertEquals("../..", FileUt.rpath(FileUt.root(), FileUt.root("a/b")))
+    }
+
+    @Test
     fun testScan01() {
         val files = testResDir.file("files")
         subtest {
@@ -329,7 +420,7 @@ class TestFileUt01 : TestBase() {
         val files = testResDir.file("files")
         subtest {
             val list = ArrayList<String>()
-            files.walker.walk { _, rpath -> list.add(rpath) }
+            files.ut.walk { _, rpath -> list.add(rpath) }
             log.d(list)
             assertEquals(16, list.size)
             assertTrue(list.indexOf("dir1") < list.indexOf("dir1/dir1a"))
@@ -337,7 +428,7 @@ class TestFileUt01 : TestBase() {
         }
         subtest {
             val list = ArrayList<String>()
-            files.walker.walk { _, rpath ->
+            files.ut.walk { _, rpath ->
                 if (!rpath.contains("dir2")) {
                     list.add(rpath)
                 }
@@ -347,7 +438,7 @@ class TestFileUt01 : TestBase() {
         }
         subtest {
             val list = ArrayList<String>()
-            files.walker.basepath("prefix").walk { _, rpath ->
+            files.ut.walk(basepath = "prefix") { _, rpath ->
                 if (!rpath.contains("dir2")) {
                     list.add(rpath)
                 }
@@ -365,7 +456,7 @@ class TestFileUt01 : TestBase() {
         val files = testResDir.file("files")
         subtest {
             val list = ArrayList<String>()
-            files.walker.walk { _, rpath ->
+            files.ut.walk { _, rpath ->
                 list.add(rpath)
             }
             log.d(list)
@@ -375,7 +466,7 @@ class TestFileUt01 : TestBase() {
         }
         subtest {
             val list = ArrayList<String>()
-            files.walker.walk { _, rpath ->
+            files.ut.walk { _, rpath ->
                 if (rpath.contains("dir2")) return@walk
                 list.add(rpath)
             }
@@ -384,7 +475,7 @@ class TestFileUt01 : TestBase() {
         }
         subtest {
             val list = ArrayList<String>()
-            files.walker.basepath("prefix").walk { _, rpath ->
+            files.ut.walk(basepath = "prefix") { _, rpath ->
                 if (rpath.contains("dir2")) return@walk
                 list.add(rpath)
             }
@@ -401,7 +492,7 @@ class TestFileUt01 : TestBase() {
         val files = testResDir.file("files")
         subtest {
             val list = ArrayList<String>()
-            files.walker.bottomUp().walk { _, rpath ->
+            files.ut.walk(bottomup = true) { _, rpath ->
                 list.add(rpath)
             }
             log.d(list)
@@ -411,7 +502,7 @@ class TestFileUt01 : TestBase() {
         }
         subtest {
             val list = ArrayList<String>()
-            files.walker.bottomUp().walk { _, rpath ->
+            files.ut.walk(bottomup = true) { _, rpath ->
                 if (rpath.contains("dir2")) return@walk
                 list.add(rpath)
             }
@@ -420,7 +511,7 @@ class TestFileUt01 : TestBase() {
         }
         subtest {
             val list = ArrayList<String>()
-            files.walker.basepath("prefix").bottomUp().walk { _, rpath ->
+            files.ut.walk(basepath = "prefix") { _, rpath ->
                 if (rpath.contains("dir2")) return@walk
                 list.add(rpath)
             }
@@ -437,7 +528,7 @@ class TestFileUt01 : TestBase() {
         val files = testResDir.file("files")
         subtest {
             val list = ArrayList<String>()
-            files.walker.files { _, rpath ->
+            files.ut.files { file, rpath ->
                 list.add(rpath)
             }
             log.d(list)
@@ -445,7 +536,7 @@ class TestFileUt01 : TestBase() {
         }
         subtest {
             val list = ArrayList<String>()
-            files.walker.files { _, rpath ->
+            files.ut.files { file, rpath ->
                 if (!rpath.contains("dir2")) {
                     list.add(rpath)
                 }
@@ -455,7 +546,7 @@ class TestFileUt01 : TestBase() {
         }
         subtest {
             val list = ArrayList<String>()
-            files.walker.basepath("prefix").files { _, rpath ->
+            files.ut.files(basepath = "prefix") { file, rpath ->
                 if (!rpath.contains("dir2")) {
                     list.add(rpath)
                 }
@@ -473,7 +564,7 @@ class TestFileUt01 : TestBase() {
         val files = testResDir.file("files")
         subtest {
             val list = ArrayList<String>()
-            files.walker.bottomUp().dirs { _, rpath ->
+            files.ut.dirs(bottomup = true) { file, rpath ->
                 list.add(rpath)
             }
             log.d(list)
@@ -482,7 +573,7 @@ class TestFileUt01 : TestBase() {
         }
         subtest {
             val list = ArrayList<String>()
-            files.walker.dirs { _, rpath ->
+            files.ut.dirs { file, rpath ->
                 list.add(rpath)
             }
             log.d(list)
@@ -491,7 +582,7 @@ class TestFileUt01 : TestBase() {
         }
         subtest {
             val list = ArrayList<String>()
-            files.walker.dirs { _, rpath ->
+            files.ut.dirs { file, rpath ->
                 if (!rpath.contains("dir2")) {
                     list.add(rpath)
                 }
@@ -501,7 +592,7 @@ class TestFileUt01 : TestBase() {
         }
         subtest {
             val list = ArrayList<String>()
-            files.walker.basepath("prefix").dirs { _, rpath ->
+            files.ut.dirs(basepath = "prefix") { file, rpath ->
                 if (!rpath.contains("dir2")) {
                     list.add(rpath)
                 }
@@ -518,18 +609,18 @@ class TestFileUt01 : TestBase() {
     fun testCollectorCollect01() {
         val files = testResDir.file("files")
         subtest {
-            assertEquals(16, files.walker.collector(::Pair).collect().count())
-            assertEquals(16, files.walker.collector(FilePathCollectors::fileCollector).collect().count())
-            assertEquals(16, files.walker.collector(FilePathCollectors::pathCollector).collect().count())
-            assertEquals(7, files.walker.collector(FilePathCollectors::fileCollector).collect { _, rpath ->
-                rpath.startsWith("dir1")
+            assertEquals(16, files.ut.collects().count())
+            assertEquals(16, files.ut.collects(FilePathCollectors::fileOfAny).count())
+            assertEquals(16, files.ut.collects(FilePathCollectors::pathOfAny).count())
+            assertEquals(7, files.ut.collects<File> { file, rpath ->
+                if (rpath.startsWith("dir1")) file else null
             }.count())
-            assertEquals(7, files.walker.pathCollector().collect { _, rpath ->
-                rpath.startsWith("dir1")
+            assertEquals(7, files.ut.collects<String> { file, rpath ->
+                if (rpath.startsWith("dir1")) rpath else null
             }.count())
-            assertTrue(files.walker.fileCollector().collect().all { it is File })
-            assertTrue(files.walker.pathCollector().collect().all { it is String })
-            val list = files.walker.pathCollector().collect()
+            assertTrue(files.ut.collects(FilePathCollectors::fileOfAny).all { it is File })
+            assertTrue(files.ut.collects(FilePathCollectors::pathOfAny).all { it is String })
+            val list = files.ut.collects(FilePathCollectors::pathOfAny)
             assertTrue(list.indexOf("dir1") < list.indexOf("dir1/dir1a"))
             assertTrue(list.indexOf("dir1/dir1a") < list.indexOf("dir1/dir1a/file1a.txt"))
         }
@@ -539,17 +630,17 @@ class TestFileUt01 : TestBase() {
     fun testCollectorFiles01() {
         val files = testResDir.file("files")
         subtest {
-            assertEquals(11, files.walker.collector().files().count())
-            assertEquals(11, files.walker.fileCollector().files().count())
-            assertEquals(11, files.walker.pathCollector().files().count())
-            assertEquals(5, files.walker.fileCollector().files { _, rpath ->
-                rpath.startsWith("dir1")
+            assertEquals(11, files.ut.collects(FilePathCollectors::pairOfFiles).count())
+            assertEquals(11, files.ut.collects(FilePathCollectors::pairOfFiles).map(Pair<File, String>::first).count())
+            assertEquals(11, files.ut.collects(FilePathCollectors::pairOfFiles).map(Pair<File, String>::second).count())
+            assertEquals(5, files.ut.collects<File> { file, rpath ->
+                if (file.isFile && rpath.startsWith("dir1")) file else null
             }.count())
-            assertEquals(5, files.walker.pathCollector().files { _, rpath ->
-                rpath.startsWith("dir1")
+            assertEquals(5, files.ut.collects<String> { file, rpath ->
+                if (file.isFile && rpath.startsWith("dir1")) rpath else null
             }.count())
-            assertTrue(files.walker.fileCollector().files().all { it is File })
-            assertTrue(files.walker.pathCollector().files().all { it is String })
+            assertTrue(files.ut.collects(FilePathCollectors::pairOfFiles).all { it.first is File })
+            assertTrue(files.ut.collects(FilePathCollectors::pairOfFiles).all { it.second is String })
         }
     }
 
@@ -557,18 +648,18 @@ class TestFileUt01 : TestBase() {
     fun testCollectorDirs01() {
         val files = testResDir.file("files")
         subtest {
-            assertEquals(5, files.walker.collector().dirs().count())
-            assertEquals(5, files.walker.fileCollector().dirs().count())
-            assertEquals(5, files.walker.pathCollector().dirs().count())
-            assertEquals(2, files.walker.fileCollector().dirs { _, rpath ->
-                rpath.startsWith("dir1")
+            assertEquals(5, files.ut.collects(FilePathCollectors::pairOfDirs).count())
+            assertEquals(5, files.ut.collects(FilePathCollectors::pairOfDirs).map(Pair<File, String>::first).count())
+            assertEquals(5, files.ut.collects(FilePathCollectors::pairOfDirs).map(Pair<File, String>::second).count())
+            assertEquals(2, files.ut.collects<File> { file, rpath ->
+                if (file.isDirectory && rpath.startsWith("dir1")) file else null
             }.count())
-            assertEquals(2, files.walker.pathCollector().dirs { _, rpath ->
-                rpath.startsWith("dir1")
+            assertEquals(2, files.ut.collects<String> { file, rpath ->
+                if (file.isDirectory && rpath.startsWith("dir1")) rpath else null
             }.count())
-            assertTrue(files.walker.fileCollector().dirs().all { it is File })
-            assertTrue(files.walker.pathCollector().dirs().all { it is String })
-            val list = files.walker.pathCollector().dirs()
+            assertTrue(files.ut.collects(FilePathCollectors::pairOfDirs).all { it.first is File })
+            assertTrue(files.ut.collects(FilePathCollectors::pairOfDirs).all { it.second is String })
+            val list = files.ut.collects(FilePathCollectors::pairOfDirs).map(Pair<File, String>::second)
             assertTrue(list.indexOf("dir1") < list.indexOf("dir1/dir1a"))
         }
     }
@@ -576,7 +667,7 @@ class TestFileUt01 : TestBase() {
     @Test
     fun testFind01() {
         val srcdir = projectRes("src")
-        val file = srcdir.walker.find { file, rpath ->
+        val file = srcdir.ut.find { file, rpath ->
             file.isFile && rpath.endsWith("/Builder.kt")
         }
         val ignoresdir = { _: File, rpath: String -> !rpath.contains("main") }
@@ -585,112 +676,104 @@ class TestFileUt01 : TestBase() {
         assertNotNull(file)
         assertTrue("${file!!.length()}", file.length() > 1024)
         //
-        assertNull(srcdir.walker.find { _, _ -> false })
-        assertNull(srcdir.walker.basepath("prefix").find { _, _ -> false })
-        assertNull(srcdir.walker.ignoresDir(ignoresdir).find { _, _ -> false })
-        assertNull(srcdir.walker.basepath("prefix").ignoresDir(ignoresdir).find { _, _ -> false })
+        assertNull(srcdir.ut.find { _, _ -> false })
+        assertNull(srcdir.ut.find(basepath = "prefix") { _, _ -> false })
+        assertNull(srcdir.ut.find(ignoresdir = ignoresdir) { _, _ -> false })
+        assertNull(srcdir.ut.find(basepath = "prefix", ignoresdir = ignoresdir) { _, _ -> false })
         //
-        assertNotNull(srcdir.walker.find(accept = builderkt))
-        assertNotNull(srcdir.walker.basepath("prefix").find(builderkt))
-        assertNotNull(srcdir.walker.ignoresDir(ignoresdir).find(builderkt))
-        assertNotNull(srcdir.walker.basepath("prefix").ignoresDir(ignoresdir).find(builderkt))
+        assertNotNull(srcdir.ut.find(accept = builderkt))
+        assertNotNull(srcdir.ut.find(basepath = "prefix", accept = builderkt))
+        assertNotNull(srcdir.ut.find(ignoresdir = ignoresdir, accept = builderkt))
+        assertNotNull(srcdir.ut.find(basepath = "prefix", ignoresdir = ignoresdir, accept = builderkt))
         //
-        Without.exceptionOrFail { srcdir.walker.findOrFail(accept = builderkt) }
+        Without.exceptionOrFail { srcdir.ut.findOrFail(accept = builderkt) }
         Without.exceptionOrFail {
-            srcdir.walker.basepath("prefix").findOrFail { _, rpath ->
+            srcdir.ut.findOrFail(basepath = "prefix") { _, rpath ->
                 rpath.startsWith("prefix/") && rpath.endsWith("Builder.kt")
             }
         }
         Without.exceptionOrFail {
-            srcdir.walker.ignoresDir(ignoresdir).findOrFail { _, rpath ->
+            srcdir.ut.findOrFail(ignoresdir = ignoresdir) { _, rpath ->
                 rpath.endsWith("Builder.kt")
             }
         }
         Without.exceptionOrFail {
-            srcdir.walker.basepath("prefix").ignoresDir { _, rpath ->
+            srcdir.ut.findOrFail(basepath = "prefix", ignoresdir = { _, rpath ->
                 !rpath.contains("main")
-            }.findOrFail { _, rpath ->
+            }) { _, rpath ->
                 rpath.startsWith("prefix/") && rpath.endsWith("Builder.kt")
             }
         }
-        With.exceptionOrFail { srcdir.walker.findOrFail { _, _ -> false } }
+        With.exceptionOrFail { srcdir.ut.findOrFail { _, _ -> false } }
         With.exceptionOrFail {
-            srcdir.walker.ignoresDir { _, rpath ->
+            srcdir.ut.findOrFail(ignoresdir = { _, rpath ->
                 rpath.startsWith("main")
-            }.findOrFail(builderkt)
+            }, accept = builderkt)
         }
-        With.exceptionOrFail { srcdir.walker.basepath("prefix").findOrFail { _, _ -> false } }
+        With.exceptionOrFail { srcdir.ut.findOrFail(basepath = "prefix") { _, _ -> false } }
         With.exceptionOrFail {
-            srcdir.walker.basepath("prefix").ignoresDir { _, rpath ->
+            srcdir.ut.findOrFail(basepath = "prefix", ignoresdir = { _, rpath ->
                 rpath.startsWith("prefix")
-            }.findOrFail(builderkt)
+            }, accept = builderkt)
         }
-        With.exceptionOrFail { file.walker.findOrFail { f, _ -> f.isFile } }
+        With.exceptionOrFail { file.ut.findOrFail { f, _ -> f.isFile } }
     }
 
     @Test
     fun testCollect01() {
         val files = testResDir.file("files")
         subtest {
-            val s =
-                files.walker.ignoresDir { _, rpath -> rpath != "dir1" }.collect { file, _ -> file.isFile }
+            val s = files.ut.collects(ignoresdir = { _, rpath -> rpath != "dir1" }) { file, rpath ->
+                if (file.isFile) Pair(file, rpath) else null
+            }
             log.d(s.map { (_, rpath) -> rpath }.iterator())
             assertEquals(5, s.count())
         }
         subtest {
-            val s = files.walker.collect { file, _ -> file.isFile }
+            val s = files.ut.collects(FilePathCollectors::pairOfFiles)
             log.d(s.map { (_, rpath) -> rpath }.iterator())
             assertEquals(11, s.count())
         }
         subtest {
             val ignoresdir1 = { _: File, rpath: String -> rpath != "dir1" && !rpath.startsWith("dir1") }
             val ignoresdirdir1 = { _: File, rpath: String -> rpath != "dir/dir1" && !rpath.startsWith("dir/dir1") }
-            val isfile = { file: File, _: String -> file.isFile }
-            val isdir1file = { f: File, rpath: String -> f.isFile && rpath.startsWith("dir1/") }
-            assertEquals(11, files.walker.collect(includes = isfile).count())
-            assertEquals(5, files.walker.collect(includes = isdir1file).count())
+            val isfile = { file: File, rpath: String -> if (file.isFile) Pair(file, rpath) else null }
+            val isdir1file = { file: File, rpath: String -> if (file.isFile && rpath.startsWith("dir1/")) Pair(file, rpath) else null }
+            assertEquals(11, files.ut.collects(collector = isfile).count())
+            assertEquals(5, files.ut.collects(collector = isdir1file).count())
             //
-            assertEquals(11, files.walker.collect { f, _ -> FileUt.fileFilter.accept(f) }.count())
-            assertEquals(5, files.walker.collect { f, _ -> FileUt.notFileFilter.accept(f) }.count())
-            assertEquals(5, files.walker.collect { f, _ -> FileUt.dirFilter.accept(f) }.count())
-            assertEquals(11, files.walker.collect { f, _ -> FileUt.notDirFilter.accept(f) }.count())
-            assertEquals(16, files.walker.collect { f, _ -> FileUt.everythingFilter.accept(f) }.count())
+            assertEquals(11, files.ut.collects(FilePathCollectors::pairOfFiles).count())
+            assertEquals(5, files.ut.collects(FilePathCollectors::pairOfDirs).count())
+            assertEquals(16, files.ut.collects().count())
             //
-            assertEquals(6, files.walker.ignoresDir(ignoresdir1).collect(FileUt.filePredicate).count())
-            assertEquals(4, files.walker.ignoresDir(ignoresdir1).collect(FileUt.notFilePredicate).count())
-            assertEquals(4, files.walker.ignoresDir(ignoresdir1).collect(FileUt.dirPredicate).count())
-            assertEquals(6, files.walker.ignoresDir(ignoresdir1).collect(FileUt.notDirPredicate).count())
-            assertEquals(10, files.walker.ignoresDir(ignoresdir1).collect(FileUt.everythingPredicate).count())
+            assertEquals(6, files.ut.collects(ignoresdir = ignoresdir1, collector = FilePathCollectors::pairOfFiles).count())
+            assertEquals(4, files.ut.collects(ignoresdir = ignoresdir1, collector = FilePathCollectors::pairOfDirs).count())
+            assertEquals(10, files.ut.collects(ignoresdir = ignoresdir1).count())
             //
-            assertEquals(11, files.walker.basepath("dir").collect(FileUt.filePredicate).count())
-            assertEquals(5, files.walker.basepath("dir").collect(FileUt.notFilePredicate).count())
-            assertEquals(5, files.walker.basepath("dir").collect(FileUt.dirPredicate).count())
-            assertEquals(11, files.walker.basepath("dir").collect(FileUt.notDirPredicate).count())
-            assertEquals(16, files.walker.basepath("dir").collect(FileUt.everythingPredicate).count())
-            assertTrue(files.walker.basepath("dir").collect(FileUt.everythingPredicate).all { (_, rpath) ->
+            assertEquals(11, files.ut.collects(basepath = "dir", collector = FilePathCollectors::pairOfFiles).count())
+            assertEquals(5, files.ut.collects(basepath = "dir", collector = FilePathCollectors::pairOfDirs).count())
+            assertEquals(16, files.ut.collects(basepath = "dir").count())
+            assertTrue(files.ut.collects(basepath = "dir").all { (_, rpath) ->
                 rpath.startsWith("dir/")
             })
             //
-            assertEquals(
-                6, files.walker.basepath("dir").ignoresDir(ignoresdirdir1)
-                    .collect(FileUt.filePredicate).count()
-            )
-            assertEquals(
-                4, files.walker.basepath("dir").ignoresDir(ignoresdirdir1)
-                    .collect(FileUt.notFilePredicate).count()
-            )
-            assertEquals(
-                4, files.walker.basepath("dir").bottomUp().ignoresDir(ignoresdirdir1)
-                    .collect(FileUt.dirPredicate).count()
-            )
-            assertEquals(
-                6, files.walker.basepath("dir").bottomUp().ignoresDir(ignoresdirdir1)
-                    .collect(FileUt.notDirPredicate).count()
-            )
-            assertEquals(
-                10, files.walker.basepath("dir").bottomUp().ignoresDir(ignoresdirdir1)
-                    .collect(FileUt.everythingPredicate).count()
-            )
+            assertEquals(6, files.ut.collects(
+                    basepath = "dir",
+                    ignoresdir = ignoresdirdir1,
+                    collector = FilePathCollectors::pairOfFiles
+            ).count())
+            assertEquals(4, files.ut.collects(
+                    basepath = "dir",
+                    bottomup = true,
+                    ignoresdir = ignoresdirdir1,
+                    collector = FilePathCollectors::pairOfDirs
+            ).count())
+            assertEquals(10, files.ut.collects(
+                    basepath = "dir",
+                    bottomup = true,
+                    ignoresdir = ignoresdirdir1,
+                    collector = FilePathCollectors::pairOfAny
+            ).count())
         }
     }
 
@@ -704,7 +787,7 @@ class TestFileUt01 : TestBase() {
             assertFalse(to.exists())
             FileUt.copy(to, from)
             assertTrue(to.exists())
-            assertTrue(With.exception { FileUt.copy(FileUt.root("notexists"), from) } is IOException)
+            assertTrue(With.exceptionOrNull { FileUt.copy(FileUt.root("notexists"), from) } is IOException)
             With.inputStream(from) { input1 ->
                 val fromtext = FileUt.asString(input1)
                 With.inputStream(to) { input2 ->
@@ -727,13 +810,13 @@ class TestFileUt01 : TestBase() {
             assertTrue(to.exists())
         }
         subtest {
-            val s = from.parentFile.walker.collect(FileUt.filePredicate)
+            val s = from.parentFile.ut.collects(FilePathCollectors::pairOfFiles)
             val tmp = tmpDir()
             FileUt.copyto(tmp, s.map { it.first })
-            val out = tmp.walker.collect(FileUt.filePredicate).map { it.first }
+            val out = tmp.ut.collects(FilePathCollectors::pairOfFiles).map { it.first }
             assertEquals(s.count(), out.count())
             FileUt.remove(out)
-            assertEquals(0, tmp.walker.collect(FileUt.filePredicate).count())
+            assertEquals(0, tmp.ut.collects(FilePathCollectors::pairOfFiles).count())
         }
     }
 
@@ -777,7 +860,7 @@ class TestFileUt01 : TestBase() {
             log.d("# actual files=$actualfiles, dirs=$actualdirs")
             assertEquals(expectedfiles, actualfiles)
             assertEquals(expecteddirs, actualdirs)
-            outdir.walker.walk { file, rpath ->
+            outdir.ut.walk { file, rpath ->
                 if (file.name == "TestFileUtil01.kt") {
                     assertTrue(file.exists())
                     assertTrue(file.length() > 1024)
@@ -814,7 +897,8 @@ class TestFileUt01 : TestBase() {
         assertEquals(expectedfiles, actualfiles)
         assertEquals(expecteddirs, actualdirs)
         assertTrue(outdir.file("empty.dir").exists())
-        outdir.walker.files { file, rpath ->
+        outdir.ut.walk { file, rpath ->
+            if (!file.isFile) return@walk
             assertFalse(FileUt.diff(file, fromdir.file(rpath)))
         }
     }
@@ -826,10 +910,10 @@ class TestFileUt01 : TestBase() {
         val expecteddirs = FileUt.count(fromdir) { it.isDirectory }
         val zipfile = tmpDir().file("t.zip")
         val outdir = tmpDir()
-        val cmdline = mutableListOf<String>("zip", "-ry", zipfile.absolutePath, ".")
-        // fromdir.walker.files { _, rpath -> cmdline.add(rpath) }
-        log.d("# cmdline=$cmdline")
-        log.d(ProcessUt.backtick(fromdir, cmdline))
+        val args = mutableListOf<String>("-ry", zipfile.absolutePath, ".")
+        // fromdir.ut.files { _, rpath -> cmdline.add(rpath) }
+        log.d("# cmdline=$args")
+        log.d(ProcessUt.backtick(fromdir, "zip", args))
         log.d("# length=${zipfile.length()}")
         assertTrue(zipfile.exists())
         assertFalse(outdir.file("empty.dir").exists())
@@ -841,7 +925,8 @@ class TestFileUt01 : TestBase() {
         assertEquals(expectedfiles, actualfiles)
         assertEquals(expecteddirs, actualdirs)
         assertTrue(outdir.file("empty.dir").exists())
-        outdir.walker.files { file, rpath ->
+        outdir.ut.walk { file, rpath ->
+            if (!file.isFile) return@walk
             assertFalse(FileUt.diff(file, fromdir.file(rpath)))
         }
     }
@@ -859,11 +944,11 @@ class TestFileUt01 : TestBase() {
         assertEquals(4, count)
         assertTrue(zipfile.exists())
         FileUt.unzip(outdir, zipfile) { true }
-        val expected = Fileset(fromdir).includes(RegexFilter(includes)).excludes(RegexFilter(excludes)).collect()
+        val expected = Fileset(fromdir).includes(RegexFilter(includes)).excludes(RegexFilter(excludes)).pairOfAny()
         for ((_, rpath) in expected) {
             log.d("# $rpath")
         }
-        assertEquals(expected.count(), outdir.walker.collect(FileUt.filePredicate).count())
+        assertEquals(expected.count(), outdir.ut.collects(FilePathCollectors::pairOfFiles).count())
     }
 
     @Test
@@ -875,8 +960,8 @@ class TestFileUt01 : TestBase() {
         val includes = "^.*file\\d+.*"
         val excludes = "^.*file1.txt"
         assertFalse(zipfile.exists())
-        val from = Fileset(fromdir).includes(RegexFilter(includes)).excludes(RegexFilter(excludes)).collect()
-            .map { (_, rpath) -> rpath }
+        val from = Fileset(fromdir).includes(RegexFilter(includes)).excludes(RegexFilter(excludes)).pairOfAny()
+                .map { (_, rpath) -> rpath }
         log.d("## From: ${from.count()}")
         for (rpath in from) {
             log.d("# $rpath")
@@ -885,7 +970,7 @@ class TestFileUt01 : TestBase() {
         assertEquals(4, count)
         assertTrue(zipfile.exists())
         FileUt.unzip(outdir, zipfile, includes, "^.*file2a.txt")
-        val to = outdir.walker.collect(FileUt.filePredicate).map { it.second }
+        val to = outdir.ut.collects(FilePathCollectors::pairOfFiles).map { it.second }
         log.d("## To: ${to.count()}")
         for (rpath in to) {
             log.d("# $rpath")
@@ -906,7 +991,7 @@ class TestFileUt01 : TestBase() {
         FileUt.unzip(outdir, zipfile) { true }
         assertTrue(outdir.file("empty.dir").exists())
         var checked = 0
-        outdir.walker.walk { file, rpath ->
+        outdir.ut.walk { file, rpath ->
             // Note that while directory entry has perserved timestamp, the
             // directory is modified when file is created in it.
             if (file.isFile || rpath.endsWith("empty.dir")) {
@@ -930,7 +1015,7 @@ class TestFileUt01 : TestBase() {
         FileUt.unzip(outdir, zipfile) { true }
         assertTrue(outdir.file("empty.dir").exists())
         var checked = 0
-        outdir.walker.walk { file, rpath ->
+        outdir.ut.walk { file, rpath ->
             // Note that while directory entry has perserved timestamp, the
             // directory is modified when file is created in it.
             if (file.isFile || rpath.endsWith("empty.dir")) {
@@ -981,14 +1066,14 @@ class TestFileUt01 : TestBase() {
             val tmpdir = tmpDir()
             task(Copy(tmpdir, testResDir.file("files")))
             val fileset = Fileset(tmpdir).includes("dir1/**")
-            FileUt.setWorldReadonly(*fileset.collect().map { it.first }.toList().toTypedArray())
-            fileset.collect().forEach { (file, rpath) ->
+            FileUt.setWorldReadonly(*fileset.pairOfAny().map { it.first }.toList().toTypedArray())
+            fileset.pairOfAny().forEach { (file, rpath) ->
                 val output = ProcessUt.backtick(tmpdir, "ls", "-ald", rpath)
                 assertTrue(output, output.contains(if (file.isDirectory) "drwxr-xr-x" else "-rw-r--r--"))
             }
-            FileUt.setPermission(FileUt.permissionsOwnerOnlyDir, fileset.dirs().map { it.first }.iterator())
-            FileUt.setPermission(FileUt.permissionsOwnerOnlyFile, fileset.files().map { it.first }.iterator())
-            fileset.collect().forEach { (file, rpath) ->
+            FileUt.setPermission(FileUt.permissionsOwnerOnlyDir, fileset.fileOfDirs().iterator())
+            FileUt.setPermission(FileUt.permissionsOwnerOnlyFile, fileset.fileOfFiles().iterator())
+            fileset.pairOfAny().forEach { (file, rpath) ->
                 val output = ProcessUt.backtick(tmpdir, "ls", "-ald", rpath)
                 assertTrue(output, output.contains(if (file.isDirectory) "drwx------" else "-rw-------"))
             }

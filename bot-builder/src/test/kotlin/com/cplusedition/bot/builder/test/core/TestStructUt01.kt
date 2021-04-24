@@ -18,7 +18,7 @@
 package com.cplusedition.bot.builder.test.core
 
 import com.cplusedition.bot.builder.test.zzz.TestBase
-import com.cplusedition.bot.core.StructUtil.Companion.StructUt
+import com.cplusedition.bot.core.StructUt
 import org.junit.Assert.*
 import org.junit.Test
 

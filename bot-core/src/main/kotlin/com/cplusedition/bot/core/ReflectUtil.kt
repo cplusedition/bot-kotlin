@@ -25,20 +25,18 @@ import kotlin.reflect.full.isSuperclassOf
 
 typealias Property = KProperty1<out Any, Any?>
 
+object ReflectUt : ReflectUtil()
+
 open class ReflectUtil {
 
-    companion object {
-        val ReflectUt = ReflectUtil()
-    }
-
     fun KClass<*>.declaredProperty(name: String): Property? {
-        return Without.exception<Property?> {
+        return Without.exceptionOrNull<Property?> {
             declaredMemberProperties.first { name == it.name }
         }
     }
 
     fun getDeclaredPropertyValue(o: Any, name: String): Any? {
-        return Without.exception X@{
+        return Without.exceptionOrNull X@{
             val member = o::class.declaredMemberProperties.firstOrNull {
                 name == it.name
             } ?: return@X null
@@ -97,7 +95,7 @@ open class ReflectUtil {
 
     fun <T> getPropertyValue1(o: Any, superclass: KClass<*>, property: Property?): T? {
         val m = property ?: return null
-        return Without.exception X@{
+        return Without.exceptionOrNull X@{
             if (m.parameters.size > 1) return@X null
             val c = m.returnType.classifier ?: return@X null
             if (c !is KClass<*> || !superclass.isSuperclassOf(c)) return@X null

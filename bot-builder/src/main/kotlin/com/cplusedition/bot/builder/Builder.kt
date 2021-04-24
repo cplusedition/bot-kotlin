@@ -19,8 +19,6 @@ package com.cplusedition.bot.builder
 
 import com.cplusedition.bot.builder.BuilderUtil.Companion.BU
 import com.cplusedition.bot.core.*
-import com.cplusedition.bot.core.DateUtil.Companion.DateUt
-import com.cplusedition.bot.core.FileUtil.Companion.FileUt
 import com.cplusedition.bot.core.MavenUtil.GAV
 import java.io.File
 import kotlin.reflect.full.declaredMemberProperties
@@ -37,6 +35,7 @@ interface IBuilderWorkspace {
 interface IProject {
     /** The directory that contains the target project. */
     val dir: File
+
     /** A GAV string that can be parsed by GAV.from(). */
     val gav: GAV
 }
@@ -46,8 +45,10 @@ interface IProject {
 interface IBuilderConf {
     val debugging: Boolean
     val workspace: IBuilderWorkspace
+
     /** The builder project that contains this builder. */
     val builder: IProject
+
     /** The target project that this builder works on. */
     val project: IProject
 }
@@ -206,7 +207,8 @@ open class EmptyWorkspace : IBuilderWorkspace {
 open class BasicWorkspace : IBuilderWorkspace {
     private val lazyProjects = lazy {
         this::class.declaredMemberProperties.filter {
-            IProject::class.java.isAssignableFrom(it.javaField?.type)
+            val field = it.javaField ?: return@filter false
+            IProject::class.java.isAssignableFrom(field.type)
         }.map {
             it.call(this) as IProject
         }
@@ -227,29 +229,36 @@ open class BasicWorkspace : IBuilderWorkspace {
  */
 
 open class BasicBuilderConf(
-    override val project: IProject,
-    override val builder: IProject = project,
-    override val debugging: Boolean = false,
-    override val workspace: IBuilderWorkspace = EmptyWorkspace()
+        override val project: IProject,
+        override val builder: IProject = project,
+        override val debugging: Boolean = false,
+        override val workspace: IBuilderWorkspace = EmptyWorkspace()
 ) : IBuilderConf {
+
     constructor(
-        projectgav: GAV = GAV.of("group:project:0"),
-        projectdir: File = FileUt.pwd(),
-        debugging: Boolean = false,
-        buildergav: GAV = GAV.of("group:builder:0"),
-        builderdir: File = FileUt.pwd(),
-        workspace: IBuilderWorkspace = EmptyWorkspace()
+            project: IProject,
+            debugging: Boolean,
+            workspace: IBuilderWorkspace = EmptyWorkspace()
+    ) : this(project, project, debugging, workspace)
+
+    constructor(
+            projectgav: GAV = GAV.of("group:project:0"),
+            projectdir: File = FileUt.pwd(),
+            debugging: Boolean = false,
+            buildergav: GAV = GAV.of("group:builder:0"),
+            builderdir: File = FileUt.pwd(),
+            workspace: IBuilderWorkspace = EmptyWorkspace()
     ) : this(BasicProject(projectgav, projectdir), BasicProject(buildergav, builderdir), debugging, workspace)
 }
 
 //////////////////////////////////////////////////////////////////////
 
 open class BuilderLogger(
-    debugging: Boolean,
-    classname: String
+        debugging: Boolean,
+        classname: String
 ) : CoreLogger(debugging) {
     init {
-        addLifecycleListener(object : CoreLogger.ILifecycleListener {
+        addLifecycleListener(object : ILifecycleListener {
             override fun onStart(msg: String, starttime: Long, logger: Fun10<String>) {
                 if (debugging) {
                     logger("#### Class $classname START: ${DateUt.datetimeString(starttime)}")
@@ -269,45 +278,42 @@ open class BuilderLogger(
 //////////////////////////////////////////////////////////////////////
 
 open class BasicBuilder(
-    override val conf: IBuilderConf
-) : IBasicBuilder {
-    override val log = {
-        val classname = this::class.simpleName
-        BuilderLogger(conf.debugging, classname ?: "BasicBuilder")
-    }()
-}
+        override val conf: IBuilderConf,
+        override val log: ICoreLogger = object {
+            fun createLogger(conf: IBuilderConf): ICoreLogger {
+                val classname = this::class.simpleName
+                return BuilderLogger(conf.debugging, classname ?: "BasicBuilder")
+            }
+        }.createLogger(conf)
+) : IBasicBuilder
 
 //////////////////////////////////////////////////////////////////////
 
 open class BasicProject(
-    override val gav: GAV,
-    override val dir: File = FileUt.pwd()
+        final override val gav: GAV,
+        final override val dir: File = FileUt.pwd()
 ) : IProject {
+    init {
+        dir.existsOrFail()
+    }
+
     val srcDir get() = dir.file("src")
     val buildDir get() = dir.file("build")
-    val outDir get() = dir.file("out")
     val trashDir get() = dir.file("trash")
 }
 
-open class KotlinProject(gav: GAV, dir: File = FileUt.pwd()) : BasicProject(gav, dir) {
-    val mainSrcs
-        get() = mutableListOf(
-            dir.file("src/main/java"),
-            dir.file("src/main/kotlin")
-        )
-    val testSrcs
-        get() = mutableListOf(
-            dir.file("src/test/java"),
-            dir.file("src/test/kotlin")
-        )
-    val mainRes
-        get() = mutableListOf(
-            dir.file("src/main/resources")
-        )
-    val testRes
-        get() = mutableListOf(
-            dir.file("src/test/resources")
-        )
+open class JavaProject(gav: GAV, dir: File = FileUt.pwd()) : BasicProject(gav, dir) {
+    val mainJavaDir = dir.file("src/main/java")
+    val testJavaDir = dir.file("src/test/java")
+    val mainResDir = dir.file("src/main/resources")
+    val testResDir = dir.file("src/test/resources")
+}
+
+open class KotlinProject(gav: GAV, dir: File = FileUt.pwd()) : JavaProject(gav, dir) {
+    val mainKotlinDir = dir.file("src/main/kotlin")
+    val testKotlinDir = dir.file("src/test/kotlin")
+    val mainSrcs get() = mutableListOf(mainJavaDir, testKotlinDir)
+    val testSrcs get() = mutableListOf(testJavaDir, testKotlinDir)
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -323,32 +329,49 @@ open class DebugBuilder : IBasicBuilder {
  * Basic builder for tests.
  */
 open class TestBuilder(
-    override val conf: IBuilderConf,
-    override val log: ICoreLogger = TestLogger(conf.debugging)
+        override val conf: IBuilderConf,
+        override val log: ICoreLogger = TestLogger(conf.debugging)
 ) : IBasicBuilder {
 
-    protected val trashDir: File get() = builderRes("trash").mkdirsOrFail()
-    private var tmpdir: File = createTempDir(suffix = "", directory = trashDir)
+    private val trashDir = lazy { conf.builder.dir.file("trash").mkdirsOrFail() }
+    private var tmpdir = lazyDir()
+
+    private fun lazyDir(): Lazy<File> {
+        return lazy {
+            createTempDir(suffix = "", directory = trashDir.value).also {
+                log.d("# Setting up tmp dir: $it")
+            }
+        }
+    }
 
     //////////////////////////////////////////////////////////////////////
 
     open fun beforeTest() {
         log.enter()
-        tmpdir.deleteRecursively()
-        tmpdir = createTempDir(suffix = "", directory = trashDir)
+        if (tmpdir.isInitialized()) {
+            tmpdir.value.deleteRecursively()
+        }
+        tmpdir = lazyDir()
     }
 
     open fun afterTest() {
-        tmpdir.deleteRecursively()
+        if (tmpdir.isInitialized()) {
+            log.d("# Cleaning up tmp dir: $tmpdir")
+            tmpdir.value.deleteRecursively()
+        }
         log.leaveX()
     }
 
-    fun tmpDir(dir: File = tmpdir): File {
+    fun tmpDir(dir: File = tmpdir.value): File {
         return createTempDir(suffix = "", directory = dir)
     }
 
-    fun tmpFile(prefix: String = "tmp", suffix: String? = null, dir: File = tmpdir): File {
+    fun tmpFile(prefix: String = "tmp", suffix: String? = null, dir: File = tmpdir.value): File {
         return createTempFile(prefix, suffix, directory = dir)
+    }
+
+    fun trashDir(vararg segments: String): File {
+        return trashDir.value.clean(*segments)
     }
 
     fun subtest(desc: String = "", code: Fun00) {

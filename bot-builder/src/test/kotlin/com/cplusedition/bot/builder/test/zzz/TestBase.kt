@@ -20,7 +20,6 @@ package com.cplusedition.bot.builder.test.zzz
 import com.cplusedition.bot.builder.*
 import com.cplusedition.bot.builder.test.zzz.TestBase.SuiteConf.Companion.QUICK
 import com.cplusedition.bot.core.*
-import com.cplusedition.bot.core.DateUtil.Companion.DateUt
 import org.junit.After
 import org.junit.Assert
 import org.junit.Before
@@ -31,7 +30,7 @@ import kotlin.math.abs
  * Base class for tests.
  */
 open class TestBase(debugging: Boolean = false) :
-    TestBuilder(BasicBuilderConf(debugging = debugging), TestLogger(debugging)) {
+        TestBuilder(BasicBuilderConf(debugging = debugging), TestLogger(debugging)) {
 
     companion object {
         const val GROUP = "com.cplusedition.bot"
@@ -41,9 +40,9 @@ open class TestBase(debugging: Boolean = false) :
     //////////////////////////////////////////////////////////////////////
 
     class SuiteConf(
-        val lengthy: Boolean = false,
-        val performance: Boolean = false,
-        val screenshots: Boolean = false
+            val lengthy: Boolean = false,
+            val performance: Boolean = false,
+            val screenshots: Boolean = false
     ) {
         companion object {
             val QUICK = SuiteConf()
@@ -56,14 +55,14 @@ open class TestBase(debugging: Boolean = false) :
     val suite = QUICK
 
     object Workspace : BasicWorkspace() {
-        val dir = FileUtil.FileUt.pwd("..")
+        val dir = FileUt.pwd("..")
         val botCoreProject = KotlinProject(
-            MavenUtil.GAV.of("$GROUP:bot-core:$VERSION"),
-            dir.file("bot-core")
+                MavenUtil.GAV.of("$GROUP:bot-core:$VERSION"),
+                dir.file("bot-core")
         )
         val botBuilderProject = KotlinProject(
-            MavenUtil.GAV.of("$GROUP:bot-builder:$VERSION"),
-            dir.file("bot-builder")
+                MavenUtil.GAV.of("$GROUP:bot-builder:$VERSION"),
+                dir.file("bot-builder")
         )
     }
 

@@ -17,7 +17,6 @@
 
 package com.cplusedition.bot.core
 
-import com.cplusedition.bot.core.IOUtil.Companion.IOUt
 import java.io.*
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -60,7 +59,7 @@ open class StringPrintWriter : PrintWriter, CharSequence {
     }
 
     fun println(msgs: Iterator<String>) {
-        if (msgs.hasNext()) println(msgs.join(TextUtil.TextUt.LB))
+        if (msgs.hasNext()) println(msgs.join(TextUt.LB))
     }
 
     fun println(msgs: Iterable<String>) {
@@ -80,7 +79,7 @@ open class StringPrintWriter : PrintWriter, CharSequence {
 ////////////////////////////////////////////////////////////////////////
 
 open class NumberReader(
-    var b: ByteArray
+        var b: ByteArray
 ) {
 
     private fun ishl(offset: Int, shift: Int): Int {
@@ -175,7 +174,7 @@ open class NumberReader(
 ////////////////////////////////////////////////////////////////////
 
 open class ByteReader(
-    val input: InputStream
+        val input: InputStream
 ) {
 
     constructor(array: ByteArray) : this(ByteArrayInputStream(array))
@@ -281,7 +280,7 @@ open class ByteReader(
 }
 
 open class NumberWriter(
-    val b: ByteArray
+        val b: ByteArray
 ) {
 
     private fun shr(value: Int, shift: Int): Byte {
@@ -342,7 +341,7 @@ open class NumberWriter(
 ////////////////////////////////////////////////////////////////////////
 
 open class ByteWriter(
-    val out: OutputStream
+        val out: OutputStream
 ) {
     val b = ByteArray(8)
     val w = NumberWriter(b)
@@ -401,11 +400,9 @@ open class ByteWriter(
 
 ////////////////////////////////////////////////////////////////////////
 
-open class IOUtil {
+object IOUt : IOUtil()
 
-    companion object {
-        val IOUt = IOUtil()
-    }
+open class IOUtil {
 
     val isNativeBigEndian = ByteOrder.nativeOrder() == ByteOrder.BIG_ENDIAN
     val UTF_8 = Charset.forName("UTF-8")
@@ -505,6 +502,41 @@ open class IOUtil {
 
     fun swap(x: Long): Long {
         return swap(x.toInt()).toLong() shl 32 or (swap(x.ushr(32).toInt()).toLong() and 0xffffffffL)
+    }
+}
+
+open class MyByteArrayOutputStream(cap: Int = 16 * 1024) : ByteArrayOutputStream(cap) {
+    private var closed = false
+    fun buffer(): ByteArray {
+        return buf
+    }
+
+    override fun close() {
+        super.close()
+        closed = true
+    }
+
+    fun inputStream(): InputStream {
+        if (!closed) throw IOException()
+        return ByteArrayInputStream(buf, 0, count)
+    }
+}
+
+open class SafeInputStream(private val input: InputStream) : InputStream() {
+    override fun read(): Int {
+        return input.read()
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        return input.read(b, off, len)
+    }
+
+    override fun close() {
+        try {
+            super.close()
+        } catch (e: Exception) {
+            // Ignore exception
+        }
     }
 }
 

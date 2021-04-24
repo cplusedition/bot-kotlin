@@ -18,7 +18,7 @@
 package com.cplusedition.bot.builder.test.core
 
 import com.cplusedition.bot.builder.test.zzz.TestBase
-import com.cplusedition.bot.core.DateUtil.Companion.DateUt
+import com.cplusedition.bot.core.DateUt
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.*

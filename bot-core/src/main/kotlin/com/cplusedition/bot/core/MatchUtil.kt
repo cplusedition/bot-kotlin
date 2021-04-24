@@ -17,11 +17,9 @@
 
 package com.cplusedition.bot.core
 
-open class MatchUtil {
+object MatchUt : MatchUtil()
 
-    companion object {
-        val MatchUt = MatchUtil()
-    }
+open class MatchUtil {
 
     fun compile(vararg regexs: String): Array<Regex> {
         return Array(regexs.size) { i -> Regex(regexs[i]) }

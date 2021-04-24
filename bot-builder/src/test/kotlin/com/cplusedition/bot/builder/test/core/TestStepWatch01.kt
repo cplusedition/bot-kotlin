@@ -18,7 +18,7 @@
 package com.cplusedition.bot.builder.test.core
 
 import com.cplusedition.bot.builder.test.zzz.TestBase
-import com.cplusedition.bot.core.ProcessUtil.Companion.ProcessUt
+import com.cplusedition.bot.core.ProcessUt
 import com.cplusedition.bot.core.StepWatch
 import com.cplusedition.bot.core.WithUtil.Companion.With
 import org.junit.Assert.assertTrue
@@ -87,7 +87,7 @@ class TestStepWatch01 : TestBase() {
                 )
             }
             if (true) {
-                assertTrue(With.exception { timer.pause() } is IllegalStateException)
+                assertTrue(With.exceptionOrNull { timer.pause() } is IllegalStateException)
             }
             if (true) {
                 timer.resume()

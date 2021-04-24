@@ -18,7 +18,6 @@
 package com.cplusedition.bot.core
 
 import com.cplusedition.bot.core.IStepWatch.Companion.fmt
-import com.cplusedition.bot.core.TextUtil.Companion.TextUt
 import java.util.*
 
 interface IStepWatch {
@@ -40,6 +39,7 @@ interface IStepWatch {
     fun deltaMs(): Long
 
     fun toString(msg: String): String
+    fun toString(msg: String, count: Int, unit: String): String
     fun toString(msg: String, count: Long, unit: String): String
     fun toString(msg: String, count: Float, unit: String): String
     fun toStringf(format: String, vararg args: Any): String
@@ -124,16 +124,20 @@ open class StepWatch : IStepWatch {
         return "${fmt(delta)}/${fmt(stepStartTime / 1000f)} s: $msg"
     }
 
+    override fun toString(msg: String, count: Int, unit: String): String {
+        return toString(msg, count.toLong(), unit)
+    }
+
     override fun toString(msg: String, count: Long, unit: String): String {
         val delta = deltaSec()
         val rate = rate(count.toFloat(), delta)
         return String.format(
-            "%s/%s s %10d $unit %10.2f $unit/s: %s",
-            fmt(delta),
-            fmt(stepStartTime / 1000f),
-            count,
-            rate,
-            msg
+                "%s/%s s %10d $unit %10.2f $unit/s: %s",
+                fmt(delta),
+                fmt(stepStartTime / 1000f),
+                count,
+                rate,
+                msg
         )
     }
 
@@ -141,7 +145,7 @@ open class StepWatch : IStepWatch {
         val delta = deltaSec()
         val rate = rate(count, delta)
         return String.format(
-            "%s/%s s %10.2f $unit %10.2f $unit/s: %s", fmt(delta), fmt(stepStartTime / 1000f), count, rate, msg
+                "%s/%s s %10.2f $unit %10.2f $unit/s: %s", fmt(delta), fmt(stepStartTime / 1000f), count, rate, msg
         )
     }
 

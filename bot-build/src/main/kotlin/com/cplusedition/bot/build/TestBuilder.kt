@@ -20,7 +20,7 @@ package com.cplusedition.bot.build
 import com.cplusedition.bot.build.BuilderBase.Workspace.botBuilderProject
 import com.cplusedition.bot.builder.CoreTask
 import com.cplusedition.bot.core.Fun11
-import com.cplusedition.bot.core.walker
+import com.cplusedition.bot.core.ut
 import org.junit.Ignore
 import org.junit.Test
 
@@ -45,7 +45,7 @@ class TestBuilder : BuilderBase(true) {
             for (dir in botBuilderProject.testSrcs) {
                 log.d("### $dir")
                 var count = 0
-                dir.walker.files { file, rpath ->
+                dir.ut.files { file, rpath ->
                     if (!rpath.endsWith(".kt")) return@files
                     val content = file.readText()
                     val output = code(content)

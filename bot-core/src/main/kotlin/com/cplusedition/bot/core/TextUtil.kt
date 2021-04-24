@@ -20,14 +20,11 @@ package com.cplusedition.bot.core
 import java.io.File
 import java.util.*
 
+object TextUt : TextUtil()
+
 open class TextUtil {
 
-    companion object {
-        val TextUt = TextUtil()
-
-    }
-
-    val LB = System.getProperty("line.separator")
+    val LB = System.getProperty("line.separator")!!
     val DEC_SIZE_UNIT = arrayOf("", "k", "m", "g", "t")
 
     fun isEmpty(s: CharSequence?): Boolean {
@@ -118,6 +115,14 @@ open class TextUtil {
     /** Format using ROOT locale, ie. locale independent. */
     fun format(format: String, vararg args: Any): String {
         return String.format(Locale.ROOT, format, *args)
+    }
+
+    fun toLowerCase(value: String, locale: Locale = Locale.ROOT): String {
+        return value.toLowerCase(locale)
+    }
+
+    fun toUpperCase(value: String, locale: Locale = Locale.ROOT): String {
+        return value.toUpperCase(locale)
     }
 }
 

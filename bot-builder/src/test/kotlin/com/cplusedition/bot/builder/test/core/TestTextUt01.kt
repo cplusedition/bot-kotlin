@@ -19,8 +19,8 @@ package com.cplusedition.bot.builder.test.core
 
 import com.cplusedition.bot.builder.test.zzz.TestBase
 import com.cplusedition.bot.core.Hex
-import com.cplusedition.bot.core.RandomUtil.Companion.RandomUt
-import com.cplusedition.bot.core.TextUtil.Companion.TextUt
+import com.cplusedition.bot.core.RandomUt
+import com.cplusedition.bot.core.TextUt
 import com.cplusedition.bot.core.WithUtil.Companion.With
 import com.cplusedition.bot.core.file
 import org.junit.Assert

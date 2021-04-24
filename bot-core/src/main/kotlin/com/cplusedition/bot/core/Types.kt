@@ -31,4 +31,5 @@ typealias Fun31<T1, T2, T3, R> = (T1, T2, T3) -> R
 typealias  IStringTransformer = (String) -> String?
 typealias  IFilePathCallback = (file: File, rpath: String) -> Unit
 typealias  IFilePathPredicate = (file: File, rpath: String) -> Boolean
+typealias IFilePathCollector<T> = (file: File, rpath: String) -> T?
 

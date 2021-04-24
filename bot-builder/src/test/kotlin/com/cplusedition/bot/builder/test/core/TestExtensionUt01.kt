@@ -19,13 +19,8 @@ package com.cplusedition.bot.builder.test.core
 
 import com.cplusedition.bot.builder.test.zzz.TestBase
 import com.cplusedition.bot.core.*
-import com.cplusedition.bot.core.FileUtil.Companion.FileUt
-import com.cplusedition.bot.core.ProcessUtil.Companion.ProcessUt
-import com.cplusedition.bot.core.RandomUtil.Companion.RandomUt
-import com.cplusedition.bot.core.StructUtil.Companion.StructUt
 import com.cplusedition.bot.core.WithUtil.Companion.With
 import com.cplusedition.bot.core.WithoutUtil.Companion.Without
-import com.cplusedition.bot.core.XMLUtil.Companion.XMLUt
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.*
@@ -100,10 +95,10 @@ class TestExtensionUt01 : TestBase() {
                     else -> "x"
                 }
             }.add(
-                mapOf(
-                    8 to "9",
-                    9 to "8"
-                )
+                    mapOf(
+                            8 to "9",
+                            9 to "8"
+                    )
             )
             assertEquals(4, map.size)
             assertTrue(map[1] == null)
@@ -141,14 +136,14 @@ class TestExtensionUt01 : TestBase() {
                 }
                 assertFalse(FileUt.diff(file, tmpfile))
             }
-            assertEquals(19072, With.inputStream<Int>(file) {
-                val data = FileUt.asBytes(it)
+            assertEquals(19072, With.inputStream(file) { input ->
+                val data = FileUt.asBytes(input)
                 var tmp: File? = null
                 val size = With.tmpdir<Int> { tmpdir ->
                     val tmpfile = tmpdir.file("test")
                     tmp = tmpfile
-                    val size = With.outputStream<Int>(tmpfile) {
-                        it.write(data)
+                    val size = With.outputStream(tmpfile) { output ->
+                        output.write(data)
                         data.size
                     }
                     assertTrue(tmp!!.exists())
@@ -158,21 +153,21 @@ class TestExtensionUt01 : TestBase() {
                 assertFalse(tmp!!.exists())
                 size
             })
-            With.inputStream(FileInputStream(file)) { input ->
+            With.closeable(FileInputStream(file)) { input ->
                 val data = FileUt.asBytes(input)
                 assertEquals(19072, data.size)
                 val tmpfile = tmpFile()
-                With.outputStream(FileOutputStream(tmpfile)) { output ->
+                With.closeable(FileOutputStream(tmpfile)) { output ->
                     output.write(data)
                 }
                 assertEquals(19072L, tmpfile.length())
             }
-            assertEquals(19072, With.inputStream<Int>(FileInputStream(file)) {
+            assertEquals(19072, With.closeable(FileInputStream(file)) {
                 val data = FileUt.asBytes(it)
                 var tmp: File? = null
                 val size = With.tmpfile<Int> { tmpfile ->
                     tmp = tmpfile
-                    val size = With.outputStream<Int>(FileOutputStream(tmpfile)) {
+                    val size = With.closeable(FileOutputStream(tmpfile)) {
                         it.write(data)
                         data.size
                     }
@@ -185,14 +180,14 @@ class TestExtensionUt01 : TestBase() {
             })
         }
         subtest {
-            assertTrue(With.throwable { With.inputStream(file) { throw UnknownError() } } is UnknownError)
-            assertTrue(With.throwable { With.inputStream<Int>(file) { throw UnknownError() } } is UnknownError)
-            assertTrue(With.throwable { With.inputStream(FileInputStream(file)) { throw UnknownError() } } is UnknownError)
-            assertTrue(With.throwable { With.inputStream<Int>(FileInputStream(file)) { throw UnknownError() } } is UnknownError)
-            assertTrue(With.throwable { With.outputStream(tmpFile()) { throw UnknownError() } } is UnknownError)
-            assertTrue(With.throwable { With.outputStream<Int>(tmpFile()) { throw UnknownError() } } is UnknownError)
-            assertTrue(With.throwable { With.outputStream(FileOutputStream(tmpFile())) { throw UnknownError() } } is UnknownError)
-            assertTrue(With.throwable { With.outputStream<Int>(FileOutputStream(tmpFile())) { throw UnknownError() } } is UnknownError)
+            assertTrue(With.throwableOrNull { With.inputStream(file) { throw UnknownError() } } is UnknownError)
+            assertTrue(With.throwableOrNull { With.inputStream<Int>(file) { throw UnknownError() } } is UnknownError)
+            assertTrue(With.throwableOrNull { With.closeable(FileInputStream(file)) { throw UnknownError() } } is UnknownError)
+            assertTrue(With.throwableOrNull { With.closeable(FileInputStream(file)) { throw UnknownError() } } is UnknownError)
+            assertTrue(With.throwableOrNull { With.outputStream(tmpFile()) { throw UnknownError() } } is UnknownError)
+            assertTrue(With.throwableOrNull { With.outputStream<Int>(tmpFile()) { throw UnknownError() } } is UnknownError)
+            assertTrue(With.throwableOrNull { With.closeable(FileOutputStream(tmpFile())) { throw UnknownError() } } is UnknownError)
+            assertTrue(With.throwableOrNull { With.closeable(FileOutputStream(tmpFile())) { throw UnknownError() } } is UnknownError)
         }
     }
 
@@ -295,7 +290,7 @@ class TestExtensionUt01 : TestBase() {
     fun testWithTmp01() {
         subtest {
             var tmp: File? = null
-            assertTrue(With.throwable {
+            assertTrue(With.throwableOrNull {
                 With.tmpdir {
                     tmp = it
                     assertTrue(tmp!!.exists())
@@ -306,7 +301,7 @@ class TestExtensionUt01 : TestBase() {
         }
         subtest {
             var tmp: File? = null
-            assertTrue(With.throwable {
+            assertTrue(With.throwableOrNull {
                 With.tmpfile {
                     tmp = it
                     it.writeText("123")
@@ -318,7 +313,7 @@ class TestExtensionUt01 : TestBase() {
         }
         subtest {
             var tmp: File? = null
-            assertTrue(With.throwable {
+            assertTrue(With.throwableOrNull {
                 With.tmpdir<Int> {
                     tmp = it
                     assertTrue(tmp!!.exists())
@@ -329,7 +324,7 @@ class TestExtensionUt01 : TestBase() {
         }
         subtest {
             var tmp: File? = null
-            assertTrue(With.throwable {
+            assertTrue(With.throwableOrNull {
                 With.tmpfile<Int> {
                     tmp = it
                     it.writeText("123")
@@ -347,7 +342,8 @@ class TestExtensionUt01 : TestBase() {
             val zipfile = tmpFile(suffix = ".zip")
             var expected = 0
             With.zipOutputStream(zipfile) {
-                testResDir.walker.files { file, rpath ->
+                testResDir.ut.walk { file, rpath ->
+                    if (!file.isFile) return@walk
                     ++expected
                     val entry = ZipEntry(rpath)
                     entry.lastModifiedTime = FileTime.fromMillis(file.lastModified())
@@ -373,10 +369,10 @@ class TestExtensionUt01 : TestBase() {
     fun testWithError01() {
         Without.exceptionOrFail { With.nullOrFail { null } }
         With.exceptionOrFail { With.nullOrFail { "error" } }
-        assertTrue(With.exception { throw IOException() } is IOException)
-        assertTrue(With.exception {} == null)
-        assertTrue(With.throwable { With.exception { throw UnknownError() } } is UnknownError)
-        assertTrue(With.throwable {} == null)
+        assertTrue(With.exceptionOrNull { throw IOException() } is IOException)
+        assertTrue(With.exceptionOrNull {} == null)
+        assertTrue(With.throwableOrNull { With.exceptionOrNull { throw UnknownError() } } is UnknownError)
+        assertTrue(With.throwableOrNull {} == null)
         With.exceptionOrFail { With.exceptionOrFail { } }
         With.exceptionOrFail { throw IOException() }
         With.throwableOrFail { With.throwableOrFail { } }
@@ -601,14 +597,14 @@ class TestExtensionUt01 : TestBase() {
 
     @Test
     fun testWithoutException01() {
-        assertTrue(Without.exception { } != null)
-        assertTrue(Without.exception { 1 } == 1)
+        assertTrue(Without.exceptionOrNull { } != null)
+        assertTrue(Without.exceptionOrNull { 1 } == 1)
         Without.exceptionOrFail { 1 }
-        assertNull(Without.exception { throw Exception() })
-        assertTrue(Without.throwable { } != null)
-        assertEquals(123, Without.throwable { 123 })
+        assertNull(Without.exceptionOrNull { throw Exception() })
+        assertTrue(Without.throwableOrNull { } != null)
+        assertEquals(123, Without.throwableOrNull { 123 })
         Without.throwableOrFail { 123 }
-        assertNull(Without.throwable { throw UnknownError() })
+        assertNull(Without.throwableOrNull { throw UnknownError() })
         With.exceptionOrFail { Without.exceptionOrFail { throw Exception() } }
         With.exceptionOrFail { Without.throwableOrFail { throw Exception() } }
     }

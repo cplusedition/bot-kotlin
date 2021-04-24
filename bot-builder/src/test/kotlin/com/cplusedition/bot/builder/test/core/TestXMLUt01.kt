@@ -19,7 +19,7 @@ package com.cplusedition.bot.builder.test.core
 
 import com.cplusedition.bot.builder.test.zzz.TestBase
 import com.cplusedition.bot.core.Fun11
-import com.cplusedition.bot.core.XMLUtil.Companion.XMLUt
+import com.cplusedition.bot.core.XMLUt
 import com.cplusedition.bot.core.elements
 import com.cplusedition.bot.core.file
 import org.junit.Assert.assertFalse
